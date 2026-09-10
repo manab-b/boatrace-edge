@@ -42,10 +42,14 @@ jobs:
         run: |
           set -euo pipefail
           for date in 20260201 20260223 20260226; do
-            for race in $(seq 1 12); do
-              python -m boatrace_edge.ingest --date "$date" --venue 04 --race "$race"
-            done
+            python -m boatrace_edge.ingest \
+              --date-from "$date" \
+              --date-to "$date" \
+              --venues 04 \
+              --race-start 1 \
+              --race-end 12
           done
+          python -m boatrace_edge.ingest --date 20260226 --venue 04 --race 1
       - name: Verify real historical training dataset
         run: |
           set -euo pipefail
@@ -53,7 +57,8 @@ jobs:
           test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM entry')" = "216"
           test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race_result')" = "36"
           test "$(psql "$DATABASE_URL" -tAc 'SELECT count(DISTINCT scheduled_deadline_at::date) FROM race')" = "3"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race WHERE odds_status = ''INCOMPLETE_SOURCE_RESPONSE''')" = "36"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race WHERE odds_status = ''UNKNOWN''')" = "35"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race WHERE odds_status = ''INCOMPLETE_SOURCE_RESPONSE''')" = "1"
           test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM historical_odds')" = "0"
       - name: Evaluate baseline on temporal holdout
         run: |
