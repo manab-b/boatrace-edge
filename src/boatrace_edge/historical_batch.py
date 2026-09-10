@@ -18,13 +18,13 @@ OFFICIAL_VENUE_CODES = tuple(f"{number:02d}" for number in range(1, 25))
 
 def iter_dates(start: str, end: str) -> tuple[str, ...]:
     """Return inclusive YYYYMMDD dates in chronological order."""
+    if not re.fullmatch(r"\d{8}", start) or not re.fullmatch(r"\d{8}", end):
+        raise ValueError("dates must be YYYYMMDD")
     try:
         first = date.fromisoformat(f"{start[:4]}-{start[4:6]}-{start[6:8]}")
         last = date.fromisoformat(f"{end[:4]}-{end[4:6]}-{end[6:8]}")
-    except (ValueError, IndexError):
+    except ValueError:
         raise ValueError("dates must be YYYYMMDD") from None
-    if not re.fullmatch(r"\d{8}", start) or not re.fullmatch(r"\d{8}", end):
-        raise ValueError("dates must be YYYYMMDD")
     if first > last:
         raise ValueError("start date must not be after end date")
     days: list[str] = []
@@ -51,10 +51,11 @@ def validate_batch_range(
 def collect_outcome_day(
     race_date: str, venue_code: str, *, race_start: int = 1, race_end: int = 12
 ) -> tuple[RaceSnapshot, ...]:
-    """Collect only official pre-race entries/deadlines plus official results.
+    """Collect official entries/deadlines plus official results without odds.
 
-    This path intentionally does not fetch odds. It is the bulk source used to
-    unblock Phase 2 probability research; odds remain isolated in collect_race.
+    The odds status remains UNKNOWN because this path deliberately does not
+    request an odds source. INCOMPLETE_SOURCE_RESPONSE is reserved for an
+    attempted odds fetch whose official response cannot be normalized safely.
     """
     validate_batch_range(
         start=race_date,
@@ -78,7 +79,7 @@ def collect_outcome_day(
                 deadline,
                 entries,
                 (),
-                "INCOMPLETE_SOURCE_RESPONSE",
+                "UNKNOWN",
                 result,
                 (racelist, results),
             )
