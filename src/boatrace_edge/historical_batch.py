@@ -79,12 +79,12 @@ def collect_outcome_day(
 def collect_outcome_archive_day(
     race_date: str, venue_code: str, *, race_start: int = 1, race_end: int = 12
 ) -> tuple[RaceSnapshot, ...]:
-    """Collect a venue/day from the official daily B/K LZH archives.
+    """Collect complete races from the official daily B/K LZH archives.
 
     This path performs two official downloads per day, rather than one result
     request plus one racelist request per race. Odds are deliberately excluded.
-    Races missing either a complete six-entry program or a result are rejected;
-    no inferred rows are created.
+    A venue may have no races on a given day; a race missing either a complete
+    program or a result is skipped rather than inferred.
     """
     validate_batch_range(
         start=race_date,
@@ -97,11 +97,13 @@ def collect_outcome_archive_day(
     result = fetch_result_archive(race_date)
     programs = parse_program_text(program.text, race_date, venue_code)
     results = parse_result_text(result.text, venue_code)
+    if not programs or not results:
+        return ()
     documents = archive_documents(program, result)
     snapshots: list[RaceSnapshot] = []
     for race_number in range(race_start, race_end + 1):
         if race_number not in programs or race_number not in results:
-            raise ValueError(f"official archive missing complete data for {race_date}-{venue_code}-{race_number:02d}")
+            continue
         deadline, entries = programs[race_number]
         snapshots.append(
             RaceSnapshot(
