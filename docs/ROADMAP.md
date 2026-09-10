@@ -35,6 +35,23 @@
 
 **Current gate: Phase 0. No predictive-performance claims are permitted yet.**
 
+## Phase Progress
+
+| Phase | Status | Gate |
+|---|---|---|
+| Phase 0 — Foundation | **IN PROGRESS — implementation complete, execution verification pending** | CI/tests must pass |
+| Phase 1 — Historical Data Engine | NOT STARTED | Phase 0 complete |
+| Phase 2 — Baseline Probability Model | BLOCKED | Phase 1 pass |
+| Phase 3 — Market / EV Engine | BLOCKED | Valid odds + settlement model |
+| Phase 4 — Backtest / Walk-Forward | BLOCKED | Point-in-time + OOS integrity |
+| Phase 5 — Signal Selection | BLOCKED | Positive OOS evidence |
+| Phase 6 — Live Data / Prediction | BLOCKED | Paper pipeline ready |
+| Phase 7 — Web App | NOT STARTED | Prediction engine available |
+| Phase 8 — Paper Trading | BLOCKED | Live pipeline ready |
+| Phase 9 — Production | BLOCKED | Paper trading evidence |
+
+**Current gate: Phase 0. Do not start Phase 1 until automated tests are verified green.**
+
 ## Phase 0 — Foundation
 
 ### Goal
@@ -42,16 +59,16 @@
 
 ### Tasks
 
-- [ ] Python backend
-- [ ] Web frontend
-- [ ] PostgreSQL-compatible data model
-- [ ] Type-safe API contract
-- [ ] Environment / secrets separation
-- [ ] Logging
-- [ ] Error handling
-- [ ] Data timestamps in JST
-- [ ] Reproducible local development
-- [ ] CI for tests/lint/type checks
+- [x] Python backend
+- [x] Web frontend
+- [x] PostgreSQL-compatible data model
+- [x] Type-safe API contract
+- [x] Environment / secrets separation
+- [x] Logging
+- [x] Error handling
+- [x] Data timestamps in JST
+- [x] Reproducible local development
+- [x] CI for automated tests (lint/type checks deferred to a later quality gate)
 
 ### Exit Criteria
 
