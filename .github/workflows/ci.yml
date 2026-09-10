@@ -32,5 +32,15 @@ jobs:
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - run: python -m pytest
-      - name: Validate PostgreSQL migration
+      - name: Validate foundation migration
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/001_foundation.sql
+      - name: Validate historical migration
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/002_historical_data.sql
+      - name: Ingest one real official historical race
+        run: python -m boatrace_edge.ingest --date 20260226 --venue 04 --race 1
+      - name: Verify historical records
+        run: |
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM raw_document')" = "3"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM entry WHERE race_id = ''20260226-04-01''')" = "6"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM historical_odds WHERE race_id = ''20260226-04-01''')" = "120"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race_result WHERE race_id = ''20260226-04-01''')" = "1"
