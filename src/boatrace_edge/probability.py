@@ -45,7 +45,6 @@ def fit_lane_frequency(
         raise ValueError("smoothing must be non-negative")
 
     wins = [Decimal("0")] * 6
-    exposures = [Decimal("0")] * 6
     seen: set[tuple[str, int]] = set()
     winners: dict[str, int] = {}
 
@@ -58,7 +57,6 @@ def fit_lane_frequency(
         if key in seen:
             raise ValueError("duplicate race/lane row")
         seen.add(key)
-        exposures[row.lane - 1] += Decimal("1")
         if row.won:
             winners[row.race_id] = winners.get(row.race_id, 0) + 1
             wins[row.lane - 1] += Decimal("1")
@@ -66,13 +64,13 @@ def fit_lane_frequency(
     race_ids = {race_id for race_id, _ in seen}
     if any(winners.get(race_id, 0) != 1 for race_id in race_ids):
         raise ValueError("each race must contain exactly one winner")
-    if any(sum(1 for race_id, lane in seen if race_id == rid) != 6 for rid in race_ids):
+    if any(sum(1 for race_id, _ in seen if race_id == rid) != 6 for rid in race_ids):
         raise ValueError("each race must contain exactly six lanes")
 
-    total_exposure = sum(exposures)
+    total_wins = sum(wins)
+    denominator = total_wins + smoothing * Decimal("6")
     probabilities = tuple(
-        (wins[i] + smoothing) / (total_exposure + smoothing * Decimal("6"))
-        for i in range(6)
+        (wins[i] + smoothing) / denominator for i in range(6)
     )
     return LaneProbabilityModel(probabilities=probabilities, sample_count=len(rows))
 
