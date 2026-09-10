@@ -1,10 +1,14 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from boatrace_edge.historical_batch import (
     OFFICIAL_VENUE_CODES,
+    collect_outcome_archive_day,
     iter_dates,
     validate_batch_range,
 )
+from boatrace_edge.official_archive import ArchiveText
 
 
 def test_iter_dates_is_inclusive_and_chronological():
@@ -52,3 +56,32 @@ def test_batch_range_rejects_invalid_race_interval():
             race_start=12,
             race_end=1,
         )
+
+
+def test_archive_batch_fetches_each_daily_archive_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    archive = ArchiveText(
+        "http://example.invalid/archive",
+        datetime(2026, 9, 10, tzinfo=timezone.utc),
+        "archive-sha",
+        "text",
+        "text-sha",
+    )
+    calls = {"program": 0, "result": 0}
+
+    def fetch_program(_: str) -> ArchiveText:
+        calls["program"] += 1
+        return archive
+
+    def fetch_result(_: str) -> ArchiveText:
+        calls["result"] += 1
+        return archive
+
+    monkeypatch.setattr("boatrace_edge.historical_batch.fetch_program_archive", fetch_program)
+    monkeypatch.setattr("boatrace_edge.historical_batch.fetch_result_archive", fetch_result)
+    monkeypatch.setattr("boatrace_edge.historical_batch.parse_program_text", lambda *args: {})
+    monkeypatch.setattr("boatrace_edge.historical_batch.parse_result_text", lambda *args: {})
+
+    snapshots = collect_outcome_archive_day("20260226", ("01", "24"))
+
+    assert snapshots == ()
+    assert calls == {"program": 1, "result": 1}
