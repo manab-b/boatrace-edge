@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterable, Sequence
 
+import psycopg
+
 from .probability import RaceOutcome
 
 
@@ -12,6 +14,28 @@ class TemporalSplit:
     train: tuple[RaceOutcome, ...]
     holdout: tuple[RaceOutcome, ...]
     cutoff_at: datetime
+
+
+def load_lane_outcomes(database_url: str) -> tuple[RaceOutcome, ...]:
+    """Build PIT-safe first-place rows only from normalized historical tables."""
+    with psycopg.connect(database_url) as conn:
+        rows = conn.execute(
+            """
+            SELECT r.race_id, e.lane,
+                   e.lane = rr.first_lane AS won,
+                   r.scheduled_deadline_at AS feature_cutoff_at
+            FROM race AS r
+            JOIN entry AS e ON e.race_id = r.race_id
+            JOIN race_result AS rr ON rr.race_id = r.race_id
+            WHERE r.scheduled_deadline_at IS NOT NULL
+            ORDER BY r.scheduled_deadline_at, r.race_id, e.lane
+            """
+        ).fetchall()
+    outcomes = tuple(
+        RaceOutcome(race_id, lane, won, feature_cutoff_at)
+        for race_id, lane, won, feature_cutoff_at in rows
+    )
+    return build_lane_outcomes(outcomes)
 
 
 def build_lane_outcomes(rows: Iterable[RaceOutcome]) -> tuple[RaceOutcome, ...]:
@@ -32,6 +56,8 @@ def build_lane_outcomes(rows: Iterable[RaceOutcome]) -> tuple[RaceOutcome, ...]:
             raise ValueError(f"race {race_id} contains duplicate lanes")
         if sum(row.won for row in race_rows) != 1:
             raise ValueError(f"race {race_id} must contain exactly one winner")
+        if len({row.feature_cutoff_at for row in race_rows}) != 1:
+            raise ValueError(f"race {race_id} must share one feature cutoff")
 
     return tuple(sorted(rows, key=lambda row: (row.feature_cutoff_at, row.race_id, row.lane)))
 
