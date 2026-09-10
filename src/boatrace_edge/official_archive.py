@@ -5,6 +5,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
+from decimal import Decimal
 from io import BytesIO
 from urllib.request import Request, urlopen
 
@@ -121,7 +122,10 @@ def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, 
             if current_race is not None:
                 if deadline is None or set(entries) != set(range(1, 7)):
                     raise ValueError(f"incomplete program data for {current_race}R")
-                races[current_race] = (datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST), tuple(entries[i] for i in range(1, 7)))
+                races[current_race] = (
+                    datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST),
+                    tuple(entries[i] for i in range(1, 7)),
+                )
             current_race = race
             deadline = None
             entries = {}
@@ -141,7 +145,10 @@ def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, 
     if current_race is not None:
         if deadline is None or set(entries) != set(range(1, 7)):
             raise ValueError(f"incomplete program data for {current_race}R")
-        races[current_race] = (datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST), tuple(entries[i] for i in range(1, 7)))
+        races[current_race] = (
+            datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST),
+            tuple(entries[i] for i in range(1, 7)),
+        )
     return races
 
 
@@ -160,24 +167,22 @@ def parse_result_text(text: str, venue_code: str) -> dict[int, ResultRecord]:
         race_number = int(match.group(1))
         results[race_number] = ResultRecord(
             f"{match.group(2)}-{match.group(3)}-{match.group(4)}",
-            int(match.group(5).replace(",", "")),
+            Decimal(match.group(5).replace(",", "")),
             f"{match.group(6)}-{match.group(7)}",
-            int(match.group(8).replace(",", "")),
+            Decimal(match.group(8).replace(",", "")),
             "UNKNOWN",
         )
     return results
 
 
 def archive_documents(program: ArchiveText, result: ArchiveText) -> tuple[RawDocument, RawDocument]:
-    documents = []
-    for archive in (program, result):
-        documents.append(
-            RawDocument(
-                archive.source_url,
-                archive.fetched_at,
-                archive.text_sha256,
-                "text/plain; charset=shift_jis",
-                archive.text,
-            )
+    return tuple(
+        RawDocument(
+            archive.source_url,
+            archive.fetched_at,
+            archive.text_sha256,
+            "text/plain; charset=shift_jis",
+            archive.text,
         )
-    return tuple(documents)  # type: ignore[return-value]
+        for archive in (program, result)
+    )
