@@ -56,6 +56,8 @@ jobs:
             entry_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM entry')"
             result_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race_result')"
             date_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(DISTINCT scheduled_deadline_at::date) FROM race')"
+            test "$entry_count" -eq "$((race_count * 6))"
+            test "$result_count" -eq "$race_count"
             echo "progress: date=$date_arg races=$race_count entries=$entry_count results=$result_count dates=$date_count"
             date="$(date -d "$date + 1 day" +%F)"
           done
