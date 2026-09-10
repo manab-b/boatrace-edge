@@ -108,7 +108,10 @@ def _parse_race_header(line: str) -> int | None:
 
 
 def _entry_from_line(line: str) -> EntryRecord | None:
-    match = re.match(r"^\s*([1-6])\s+(\d{4})(.*)$", line)
+    # Official B files are fixed-format and may place the racer number
+    # immediately after the lane number; whitespace is not semantically
+    # significant here.
+    match = re.match(r"^\s*([1-6])\s*(\d{4})(.*)$", line)
     if not match:
         return None
     return EntryRecord(int(match.group(1)), match.group(2), "UNKNOWN")
@@ -151,6 +154,11 @@ def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, 
         deadline_match = re.search(r"締切予定\s*(\d{1,2}):(\d{2})", line)
         if deadline_match:
             deadline = time(int(deadline_match.group(1)), int(deadline_match.group(2)))
+        if len(entries) >= 6:
+            # A B archive can contain additional non-entry sections after the
+            # six official starters. They must not be mistaken for duplicate
+            # lanes belonging to the same race.
+            continue
         entry = _entry_from_line(line)
         if entry is not None:
             if entry.lane in entries:
@@ -167,20 +175,21 @@ def parse_result_text(text: str, venue_code: str) -> dict[int, ResultRecord]:
         return {}
     results: dict[int, ResultRecord] = {}
     for line in blocks[venue_code]:
-        normalized = line.replace("[払戻金]", "")
-        match = re.search(
-            r"^\s*(\d{1,2})R\s+([1-6])\s*-\s*([1-6])\s*-\s*([1-6])\s+([0-9,]+)\s+"
-            r"(?:[1-6]\s*-\s*[1-6]\s+[0-9,]+\s+)?"
-            r"([1-6])\s*-\s*([1-6])\s+([0-9,]+)",
-            normalized,
-        )
-        if not match:
+        normalized = _normal(line).replace("[払戻金]", "")
+        race_match = re.match(r"^\s*(\d{1,2})R\b", normalized)
+        if not race_match:
             continue
-        results[int(match.group(1))] = ResultRecord(
-            f"{match.group(2)}-{match.group(3)}-{match.group(4)}",
-            Decimal(match.group(5).replace(",", "")),
-            f"{match.group(6)}-{match.group(7)}",
-            Decimal(match.group(8).replace(",", "")),
+        race_number = int(race_match.group(1))
+        triple_match = re.search(r"([1-6])\s*-\s*([1-6])\s*-\s*([1-6])\s+([0-9,]+)", normalized)
+        pair_matches = list(re.finditer(r"([1-6])\s*-\s*([1-6])\s+([0-9,]+)", normalized))
+        if triple_match is None or not pair_matches:
+            continue
+        pair_match = pair_matches[-1]
+        results[race_number] = ResultRecord(
+            f"{triple_match.group(1)}-{triple_match.group(2)}-{triple_match.group(3)}",
+            Decimal(triple_match.group(4).replace(",", "")),
+            f"{pair_match.group(1)}-{pair_match.group(2)}",
+            Decimal(pair_match.group(3).replace(",", "")),
             "UNKNOWN",
         )
     return results
