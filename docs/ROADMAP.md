@@ -18,6 +18,23 @@
 
 ---
 
+## Phase Progress
+
+| Phase | Status | Gate |
+|---|---|---|
+| Phase 0 — Foundation | **IN PROGRESS** | Schema + validation + tests |
+| Phase 1 — Historical Data Engine | NOT STARTED | Point-in-time dataset |
+| Phase 2 — Baseline Probability Model | BLOCKED | Phase 1 pass |
+| Phase 3 — Market / EV Engine | BLOCKED | Valid odds + settlement model |
+| Phase 4 — Backtest / Walk-Forward | BLOCKED | Point-in-time + OOS integrity |
+| Phase 5 — Signal Selection | BLOCKED | Positive OOS evidence |
+| Phase 6 — Live Data / Prediction | BLOCKED | Paper pipeline ready |
+| Phase 7 — Web App | NOT STARTED | Prediction engine available |
+| Phase 8 — Paper Trading | BLOCKED | Live pipeline ready |
+| Phase 9 — Production | BLOCKED | Paper trading evidence |
+
+**Current gate: Phase 0. No predictive-performance claims are permitted yet.**
+
 ## Phase 0 — Foundation
 
 ### Goal
