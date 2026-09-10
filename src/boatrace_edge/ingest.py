@@ -40,23 +40,25 @@ def main() -> None:
         )
         count = 0
         for race_date in dates:
-            for venue in venues:
-                snapshots = (
-                    collect_outcome_archive_day(
-                        race_date,
-                        venue,
-                        race_start=args.race_start,
-                        race_end=args.race_end,
-                    )
-                    if args.source == "archive"
-                    else collect_outcome_day(
+            if args.source == "archive":
+                snapshots = collect_outcome_archive_day(
+                    race_date,
+                    venues,
+                    race_start=args.race_start,
+                    race_end=args.race_end,
+                )
+            else:
+                snapshots = tuple(
+                    snapshot
+                    for venue in venues
+                    for snapshot in collect_outcome_day(
                         race_date,
                         venue,
                         race_start=args.race_start,
                         race_end=args.race_end,
                     )
                 )
-                count += store_snapshots(args.database_url, snapshots)
+            count += store_snapshots(args.database_url, snapshots)
         print(f"ingested official outcome races={count} dates={len(dates)} venues={len(venues)} source={args.source}")
         return
 
