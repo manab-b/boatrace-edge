@@ -18,6 +18,34 @@
 
 ---
 
+## Progress Audit — 2026-09-10
+
+| Area | Status | Assessment |
+|---|---|---|
+| Foundation implementation | COMPLETE | Sufficient for the foundation gate |
+| Foundation verification | IN PROGRESS | CI execution result is the only outstanding verification |
+| Historical data engine | NOT STARTED | **Current product bottleneck** |
+| Probability model | BLOCKED | Must wait for historical PIT dataset |
+| EV engine | BLOCKED | Must wait for valid probabilities + odds |
+| Walk-forward research | BLOCKED | Must wait for PIT dataset/model |
+| Signal selection | BLOCKED | Must wait for OOS evidence |
+| Live prediction | BLOCKED | Must wait for paper-ready research |
+| Web prediction UI | NOT STARTED | Intentionally deferred |
+
+### Loop / Duplication Audit
+
+The latest 20 commits are overwhelmingly Phase 0 work. Several are micro-fixes or documentation corrections rather than new product capability. This indicates **process churn**, not duplicate production implementations. No duplicate domain, API, or migration implementation was found in the reviewed files.
+
+The foundation is now large enough. **No additional infrastructure should be added unless it directly unblocks verification or the historical data engine.**
+
+### Shortest Route
+
+1. Obtain a green CI execution for the current HEAD.
+2. Mark Phase 0 COMPLETE.
+3. Start Phase 1 immediately.
+4. Implement the smallest real-data ingestion slice: one authoritative source → raw immutable record → normalized race/entry/odds/result records → source timestamps → validation tests.
+5. Expand coverage only after that end-to-end slice is proven.
+
 ## Phase Progress
 
 | Phase | Status | Gate |
