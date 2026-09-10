@@ -48,7 +48,6 @@ jobs:
             --race-start 1 \
             --race-end 12 \
             --source archive
-          python -m boatrace_edge.ingest --date 20260226 --venue 04 --race 1
       - name: Verify research-volume historical dataset
         run: |
           set -euo pipefail
@@ -97,6 +96,8 @@ jobs:
           PY
       - name: Verify historical records
         run: |
+          set -euo pipefail
+          python -m boatrace_edge.ingest --date 20260226 --venue 04 --race 1
           test "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM entry WHERE race_id = '20260226-04-01'")" = "6"
           test "$(psql "$DATABASE_URL" -tAc "SELECT odds_status FROM race WHERE race_id = '20260226-04-01'")" = "INCOMPLETE_SOURCE_RESPONSE"
           test "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM historical_odds WHERE race_id = '20260226-04-01'")" = "0"
