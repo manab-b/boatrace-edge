@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Iterable, Sequence
 
@@ -12,7 +13,7 @@ class RaceOutcome:
     race_id: str
     lane: int
     won: bool
-    feature_cutoff_at: object
+    feature_cutoff_at: datetime
 
 
 @dataclass(frozen=True)
@@ -20,9 +21,8 @@ class LaneProbabilityModel:
     """Deterministic empirical baseline for first-place probability by lane.
 
     This is deliberately a weak baseline: lane is the only feature. Training rows
-    must be historical outcomes that were available after the race was scheduled
-    and before any future prediction dataset is assembled. No odds, payouts, or
-    post-race fields are accepted as model inputs.
+    contain historical outcomes only; odds, payouts, and post-race fields are not
+    accepted as model inputs.
     """
 
     probabilities: tuple[Decimal, ...]
@@ -35,7 +35,9 @@ class LaneProbabilityModel:
         return self.probabilities[lane - 1]
 
 
-def fit_lane_frequency(rows: Iterable[RaceOutcome], *, smoothing: Decimal = Decimal("0")) -> LaneProbabilityModel:
+def fit_lane_frequency(
+    rows: Iterable[RaceOutcome], *, smoothing: Decimal = Decimal("0")
+) -> LaneProbabilityModel:
     rows = tuple(rows)
     if not rows:
         raise ValueError("at least one historical outcome is required")
@@ -44,17 +46,28 @@ def fit_lane_frequency(rows: Iterable[RaceOutcome], *, smoothing: Decimal = Deci
 
     wins = [Decimal("0")] * 6
     exposures = [Decimal("0")] * 6
-    race_ids: set[str] = set()
+    seen: set[tuple[str, int]] = set()
+    winners: dict[str, int] = {}
+
     for row in rows:
         if not row.race_id:
             raise ValueError("race_id is required")
-        if row.race_id in race_ids:
-            raise ValueError("each race_id may appear only once per lane outcome")
         if row.lane < 1 or row.lane > 6:
             raise ValueError("lane must be between 1 and 6")
-        race_ids.add(row.race_id)
+        key = (row.race_id, row.lane)
+        if key in seen:
+            raise ValueError("duplicate race/lane row")
+        seen.add(key)
         exposures[row.lane - 1] += Decimal("1")
-        wins[row.lane - 1] += Decimal("1") if row.won else Decimal("0")
+        if row.won:
+            winners[row.race_id] = winners.get(row.race_id, 0) + 1
+            wins[row.lane - 1] += Decimal("1")
+
+    race_ids = {race_id for race_id, _ in seen}
+    if any(winners.get(race_id, 0) != 1 for race_id in race_ids):
+        raise ValueError("each race must contain exactly one winner")
+    if any(sum(1 for race_id, lane in seen if race_id == rid) != 6 for rid in race_ids):
+        raise ValueError("each race must contain exactly six lanes")
 
     total_exposure = sum(exposures)
     probabilities = tuple(
