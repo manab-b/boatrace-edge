@@ -5,10 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "boatrace-edge"
 version = "0.1.0"
-description = "Point-in-time safe foundation for BOAT RACE EDGE"
+description = "Point-in-time safe historical data engine for BOAT RACE EDGE"
 requires-python = ">=3.12"
 dependencies = [
+  "beautifulsoup4>=4.13,<5",
   "fastapi>=0.116,<1",
+  "psycopg[binary]>=3.2,<4",
   "uvicorn[standard]>=0.35,<1",
 ]
 
