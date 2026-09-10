@@ -36,7 +36,7 @@ def _valid_odds_html() -> str:
             second, third = by_first[first][row_index]
             cells.extend((str(second), str(third), "10.0"))
         rows.append("<tr>" + "".join(f"<td>{x}</td>" for x in cells) + "</tr>")
-    return "<html><body><table>" + "".join(rows) + "</table></body></html>"
+    return "<html><body>3連単オッズ<table>" + "".join(rows) + "</table>締切時オッズは source page text</body></html>"
 
 
 def test_racelist_parses_six_entries_and_jst_deadline() -> None:
@@ -63,5 +63,5 @@ def test_odds_parser_accepts_complete_120_combination_matrix() -> None:
 
 
 def test_odds_parser_rejects_incomplete_matrix() -> None:
-    with pytest.raises(ValueError, match="expected 120"):
-        parse_odds3t("<html><body><table><tr><td>1</td></tr></table></body></html>")
+    with pytest.raises(ValueError, match="expected 360"):
+        parse_odds3t("<html><body>3連単オッズ<table><tr><td>1</td></tr></table></body></html>")
