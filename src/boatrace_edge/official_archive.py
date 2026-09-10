@@ -53,13 +53,7 @@ def _fetch_archive(url: str) -> ArchiveText:
         raise ValueError(f"official archive must contain exactly one text file, got {len(names)}")
     text_payload = archive.read(names[0])
     text = text_payload.decode("shift_jis", errors="strict")
-    return ArchiveText(
-        source_url=url,
-        fetched_at=datetime.now(timezone.utc),
-        archive_sha256=archive_sha256,
-        text=text,
-        text_sha256=hashlib.sha256(text_payload).hexdigest(),
-    )
+    return ArchiveText(url, datetime.now(timezone.utc), archive_sha256, text, hashlib.sha256(text_payload).hexdigest())
 
 
 def fetch_program_archive(race_date: str) -> ArchiveText:
@@ -84,8 +78,7 @@ def _venue_blocks(text: str, marker: str) -> dict[str, list[str]]:
         if begin:
             if current is not None:
                 raise ValueError("nested official archive venue boundaries")
-            venue = begin.group(1)
-            current = []
+            venue, current = begin.group(1), []
             continue
         end = re.match(r"^\s*(\d{2})" + re.escape(marker) + r"END\s*$", line)
         if end:
@@ -109,20 +102,15 @@ def _parse_race_header(line: str) -> int | None:
 
 def _entry_from_line(line: str) -> EntryRecord | None:
     match = re.match(r"^\s*([1-6])\s*(\d{4})(.*)$", line)
-    if not match:
-        return None
-    return EntryRecord(int(match.group(1)), match.group(2), "UNKNOWN")
+    return EntryRecord(int(match.group(1)), match.group(2), "UNKNOWN") if match else None
 
 
 def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, tuple[datetime, tuple[EntryRecord, ...]]]:
-    if not re.fullmatch(r"\d{8}", race_date):
-        raise ValueError("race_date must be YYYYMMDD")
-    if not re.fullmatch(r"\d{2}", venue_code):
-        raise ValueError("venue_code must be a two-digit official venue code")
+    if not re.fullmatch(r"\d{8}", race_date) or not re.fullmatch(r"\d{2}", venue_code):
+        raise ValueError("race_date must be YYYYMMDD and venue_code must be a two-digit official venue code")
     blocks = _venue_blocks(text, "B")
     if venue_code not in blocks:
         return {}
-
     races: dict[int, tuple[datetime, tuple[EntryRecord, ...]]] = {}
     current_race: int | None = None
     deadline: time | None = None
@@ -133,35 +121,23 @@ def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, 
             return
         if deadline is None or set(entries) != set(range(1, 7)):
             raise ValueError(f"incomplete program data for {current_race}R")
-        races[current_race] = (
-            datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST),
-            tuple(entries[i] for i in range(1, 7)),
-        )
+        races[current_race] = (datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST), tuple(entries[i] for i in range(1, 7)))
 
     for line in blocks[venue_code]:
         race = _parse_race_header(line)
         if race is not None:
             finish_current()
-            current_race = race
-            deadline = None
-            entries = {}
-            deadline_match = re.search(r"締切予定\s*(\d{1,2}):(\d{2})", line)
-            if deadline_match:
-                deadline = time(int(deadline_match.group(1)), int(deadline_match.group(2)))
-            continue
-        if current_race is None:
-            continue
+            current_race, deadline, entries = race, None, {}
         deadline_match = re.search(r"締切予定\s*(\d{1,2}):(\d{2})", line)
-        if deadline_match:
+        if deadline_match and current_race is not None:
             deadline = time(int(deadline_match.group(1)), int(deadline_match.group(2)))
-        if len(entries) >= 6:
+        if current_race is None or len(entries) >= 6:
             continue
         entry = _entry_from_line(line)
         if entry is not None:
             if entry.lane in entries:
                 raise ValueError(f"duplicate program lane {entry.lane} in {current_race}R")
             entries[entry.lane] = entry
-
     finish_current()
     return races
 
@@ -172,16 +148,25 @@ def parse_result_text(text: str, venue_code: str) -> dict[int, ResultRecord]:
         return {}
     results: dict[int, ResultRecord] = {}
     for line in blocks[venue_code]:
-        normalized = _normal(line).replace("[払戻金]", "")
+        normalized = _normal(line)
         race_match = re.match(r"^\s*(\d{1,2})R\b", normalized)
         if not race_match:
             continue
         race_number = int(race_match.group(1))
         triple_match = re.search(r"([1-6])\s*-\s*([1-6])\s*-\s*([1-6])\s+([0-9,]+)", normalized)
-        pair_matches = list(re.finditer(r"([1-6])\s*-\s*([1-6])\s+([0-9,]+)", normalized))
-        if triple_match is None or not pair_matches:
+        if triple_match is None:
             continue
-        pair_match = pair_matches[0]
+        # The official K-file column order is 3T, 3F, 2T, 2F.  Anchor the
+        # 2T extraction to the already parsed 3T/3F fields rather than taking
+        # the first visually matching pair, which can be part of 3T/3F.
+        after_triple = normalized[triple_match.end():]
+        three_field = re.match(r"\s*([1-6])\s*-\s*([1-6])\s*-\s*([1-6])\s+([0-9,]+)", after_triple)
+        if three_field is None:
+            continue
+        after_three = after_triple[three_field.end():]
+        pair_match = re.match(r"\s*([1-6])\s*-\s*([1-6])\s+([0-9,]+)", after_three)
+        if pair_match is None:
+            continue
         results[race_number] = ResultRecord(
             f"{triple_match.group(1)}-{triple_match.group(2)}-{triple_match.group(3)}",
             Decimal(triple_match.group(4).replace(",", "")),
@@ -193,13 +178,4 @@ def parse_result_text(text: str, venue_code: str) -> dict[int, ResultRecord]:
 
 
 def archive_documents(program: ArchiveText, result: ArchiveText) -> tuple[RawDocument, RawDocument]:
-    return tuple(
-        RawDocument(
-            archive.source_url,
-            archive.fetched_at,
-            archive.text_sha256,
-            "text/plain; charset=shift_jis",
-            archive.text,
-        )
-        for archive in (program, result)
-    )
+    return tuple(RawDocument(a.source_url, a.fetched_at, a.text_sha256, "text/plain; charset=shift_jis", a.text) for a in (program, result))
