@@ -3,8 +3,6 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from .domain import SettlementStatus
-from .integrity import validate_observation_cutoff
 from .logging import configure_logging
 
 configure_logging()
@@ -27,8 +25,3 @@ def index() -> str:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
-
-
-@app.get("/integrity/example")
-def integrity_example() -> dict[str, str]:
-    return {"refund_status": SettlementStatus.REFUND.value}
