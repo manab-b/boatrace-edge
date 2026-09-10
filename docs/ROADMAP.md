@@ -16,14 +16,12 @@
 - すべての予想を後から検証可能にする
 - 実運用では「見送り」を第一級の結果として扱う
 
----
-
 ## Progress Audit — 2026-09-10
 
 | Area | Status | Assessment |
 |---|---|---|
 | Foundation implementation | COMPLETE | Sufficient for the foundation gate |
-| Foundation verification | IN PROGRESS | CI execution result is the only outstanding verification |
+| Foundation verification | **COMPLETE** | GitHub Actions passed pytest and PostgreSQL migration validation |
 | Historical data engine | NOT STARTED | **Current product bottleneck** |
 | Probability model | BLOCKED | Must wait for historical PIT dataset |
 | EV engine | BLOCKED | Must wait for valid probabilities + odds |
@@ -32,25 +30,28 @@
 | Live prediction | BLOCKED | Must wait for paper-ready research |
 | Web prediction UI | NOT STARTED | Intentionally deferred |
 
+### Phase 0 Completion Evidence
+
+GitHub Actions run #19 completed successfully on commit `6bf099daf152b7baa4125af53e8794b3d1284d37`. The job completed with `success`; pytest and the PostgreSQL migration validation step both completed successfully.
+
 ### Loop / Duplication Audit
 
-The latest 20 commits are overwhelmingly Phase 0 work. Several are micro-fixes or documentation corrections rather than new product capability. This indicates **process churn**, not duplicate production implementations. No duplicate domain, API, or migration implementation was found in the reviewed files.
+The latest 20 commits are overwhelmingly Phase 0 work. Several are micro-fixes or documentation corrections rather than new product capability. This indicates process churn, but no duplicate production implementation was found in the reviewed files.
 
-The foundation is now large enough. **No additional infrastructure should be added unless it directly unblocks verification or the historical data engine.**
+The foundation is now frozen. **Do not add infrastructure unless it directly unblocks a failing gate or the active phase.**
 
 ### Shortest Route
 
-1. Obtain a green CI execution for the current HEAD.
-2. Mark Phase 0 COMPLETE.
-3. Start Phase 1 immediately.
-4. Implement the smallest real-data ingestion slice: one authoritative source → raw immutable record → normalized race/entry/odds/result records → source timestamps → validation tests.
-5. Expand coverage only after that end-to-end slice is proven.
+1. Phase 0 is complete.
+2. Start Phase 1 immediately.
+3. Implement the smallest real-data ingestion slice: one authoritative source → raw immutable record → normalized race/entry/odds/result records → source timestamps → validation tests.
+4. Expand coverage only after that end-to-end slice is proven.
 
 ## Phase Progress
 
 | Phase | Status | Gate |
 |---|---|---|
-| Phase 0 — Foundation | **IN PROGRESS — CI execution pending** | Tests + PostgreSQL migration must pass |
+| Phase 0 — Foundation | **COMPLETE** | Tests + PostgreSQL migration passed in CI |
 | Phase 1 — Historical Data Engine | NOT STARTED | Phase 0 complete |
 | Phase 2 — Baseline Probability Model | BLOCKED | Phase 1 pass |
 | Phase 3 — Market / EV Engine | BLOCKED | Valid odds + settlement model |
@@ -61,5 +62,6 @@ The foundation is now large enough. **No additional infrastructure should be add
 | Phase 8 — Paper Trading | BLOCKED | Live pipeline ready |
 | Phase 9 — Production | BLOCKED | Paper trading evidence |
 
-**Current gate: Phase 0. CI must execute successfully; do not start Phase 1 before the green result is confirmed.**
+**Current phase: Phase 1 — Historical Data Engine.**
 
+Phase 1 scope is deliberately limited to real historical data acquisition, immutable raw storage, normalization, timestamp/PIT integrity, and tests. Do not implement prediction, EV, signal selection, live trading, or unrelated infrastructure in Phase 1.
