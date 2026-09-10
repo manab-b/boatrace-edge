@@ -22,9 +22,9 @@
 |---|---|---|
 | Foundation implementation | COMPLETE | Sufficient for the foundation gate |
 | Foundation verification | COMPLETE | GitHub Actions passed pytest and PostgreSQL migration validation |
-| Historical data engine | **IN PROGRESS** | Real official-source vertical slice implemented; CI verification pending |
+| Historical data engine | **IN PROGRESS** | Real official-source vertical slice implemented; current gate is live ingestion verification |
 | Probability model | BLOCKED | Must wait for historical PIT dataset |
-| EV engine | BLOCKED | Must wait for valid probabilities + odds |
+| EV engine | BLOCKED | Must wait for valid probabilities + timestamped odds |
 | Walk-forward research | BLOCKED | Must wait for PIT dataset/model |
 | Signal selection | BLOCKED | Must wait for OOS evidence |
 | Live prediction | BLOCKED | Must wait for paper-ready research |
@@ -48,38 +48,39 @@ Only real historical acquisition, immutable raw storage, normalization, timestam
 
 Phase 1 becomes COMPLETE only when all are true:
 
-1. One authoritative BOAT RACE source is fetched over the network.
-2. A fixed historical race can be ingested end-to-end without synthetic production data.
-3. Three raw official documents are stored immutably: race list, 3T odds, result list.
+1. An authoritative BOAT RACE official source is fetched over the network.
+2. A fixed historical race is ingested end-to-end without synthetic production data.
+3. Three raw official documents are stored immutably: race list, 3T odds, and race result.
 4. Six race entries are normalized with official racer registration IDs.
-5. All 120 3T combinations are normalized with their official closing odds.
+5. The 3T odds response is captured and its coverage is explicitly classified. **Only a complete 120-combination response may be normalized into `historical_odds`; an incomplete response must produce zero normalized odds rather than invented or partial values.**
 6. The official 3T/2T result and payouts are normalized.
 7. Source fetch time and content SHA-256 are retained.
-8. Closing odds are explicitly marked as having **no source observation timestamp** rather than inventing one. They are therefore not yet eligible for point-in-time model training as timestamped odds observations.
-9. PostgreSQL migration and the end-to-end ingestion smoke test pass in CI.
+8. Closing odds are explicitly marked as having **no source observation timestamp** rather than inventing one. They are therefore not eligible for point-in-time model training as timestamped odds observations.
+9. PostgreSQL migrations 001–003 and the end-to-end ingestion smoke test pass in CI.
 10. Parser and integrity tests pass.
 
 ### Current Phase 1 implementation
 
-- Official source URL builders for racelist, 3T odds, and result list.
+- Official source URL builders for racelist, 3T odds, and race result.
 - Immutable raw document table with mutation-blocking trigger.
-- Normalized race, entries, 3T closing odds, and race result storage.
+- Normalized race, entries, 3T closing odds when complete, and race result storage.
+- Explicit `odds_status` to distinguish complete source responses from incomplete source responses.
 - Idempotent historical snapshot persistence.
-- Parser validation for six entries, 120 unique 3T combinations, and settlement result fields.
+- Parser validation for six entries, 120 unique 3T combinations on complete fixtures, and result/payout fields.
 - CI smoke test against fixed official historical race `20260226 / venue 04 / race 1`.
 
-### Important data-integrity decision
+### Important data-integrity decisions
 
-The official 3T page labels the displayed values as **締切時オッズ** and states that they represent odds after sales-ticket aggregation. The page does not expose a source observation timestamp. The ingestion layer therefore stores these values as `CLOSING_ODDS_WITHOUT_SOURCE_TIMESTAMP` with `as_of_at = NULL`; it does not fabricate a timestamp. This data can be used for result/market research only after a separate point-in-time odds source is established.
+The official 3T page labels the displayed values as **締切時オッズ** and states that they represent odds after sales-ticket aggregation. The page does not expose a source observation timestamp. The ingestion layer therefore never fabricates an observation timestamp. If the network response is incomplete, the raw document is retained, `odds_status` becomes `INCOMPLETE_SOURCE_RESPONSE`, and no partial odds are promoted into the normalized odds table. This prevents a silently truncated market from contaminating later research.
 
 ## Phase Progress
 
 | Phase | Status | Gate |
 |---|---|---|
 | Phase 0 — Foundation | **COMPLETE** | Tests + PostgreSQL migration passed in CI |
-| Phase 1 — Historical Data Engine | **IN PROGRESS** | Official-source vertical slice + PIT-safe timestamp handling + CI smoke test |
+| Phase 1 — Historical Data Engine | **IN PROGRESS** | Official-source vertical slice + raw immutability + explicit odds coverage + CI smoke test |
 | Phase 2 — Baseline Probability Model | BLOCKED | Phase 1 pass |
-| Phase 3 — Market / EV Engine | BLOCKED | Valid odds + settlement model |
+| Phase 3 — Market / EV Engine | BLOCKED | Valid PIT odds + settlement model |
 | Phase 4 — Backtest / Walk-Forward | BLOCKED | Point-in-time + OOS integrity |
 | Phase 5 — Signal Selection | BLOCKED | Positive OOS evidence |
 | Phase 6 — Live Data / Prediction | BLOCKED | Paper pipeline ready |
