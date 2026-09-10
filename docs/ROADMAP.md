@@ -22,7 +22,7 @@
 
 | Phase | Status | Gate |
 |---|---|---|
-| Phase 0 — Foundation | **IN PROGRESS — implementation complete, execution verification pending** | CI/tests must pass |
+| Phase 0 — Foundation | **IN PROGRESS — CI execution pending** | Tests + PostgreSQL migration must pass |
 | Phase 1 — Historical Data Engine | NOT STARTED | Phase 0 complete |
 | Phase 2 — Baseline Probability Model | BLOCKED | Phase 1 pass |
 | Phase 3 — Market / EV Engine | BLOCKED | Valid odds + settlement model |
