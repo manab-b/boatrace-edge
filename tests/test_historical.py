@@ -3,7 +3,7 @@ from itertools import permutations
 
 import pytest
 
-from boatrace_edge.historical import parse_odds3t, parse_racelist, parse_result
+from boatrace_edge.historical import parse_odds3t, parse_racelist, parse_resultlist
 
 
 RACELIST_HTML = """
@@ -21,10 +21,12 @@ RACELIST_HTML = """
 
 
 RESULT_HTML = """
-<html><body><table>
-<tr><td>3連単</td><td>1-3-6</td><td>¥2,880</td><td>8</td></tr>
-<tr><td>2連単</td><td>1-3</td><td>¥1,230</td><td>4</td></tr>
-</table><div>決まり手 逃げ</div></body></html>
+<html><body>
+レース | 3連勝単式 | 2連勝単式
+1R | 1 -3 -6 | ¥2,880 | 1 -3 | ¥1,230 |
+2R | 4 -3 -2 | ¥4,740 | 4 -3 | ¥1,210 |
+着順 結果 1R 一般 １着 ２着 ３着 ４着 ５着 ６着 逃げ
+</body></html>
 """
 
 
@@ -48,8 +50,8 @@ def test_racelist_parses_six_entries_and_jst_deadline() -> None:
     assert entries[5].racer_name == "宮下 元胤"
 
 
-def test_result_parser_reads_official_payout_rows() -> None:
-    result = parse_result(RESULT_HTML)
+def test_result_list_parser_reads_official_payout_rows() -> None:
+    result = parse_resultlist(RESULT_HTML, 1)
     assert result.combination_3t == "1-3-6"
     assert result.payout_3t == Decimal("2880")
     assert result.combination_2t == "1-3"
