@@ -39,6 +39,8 @@ def validate_batch_range(
         raise ValueError("venues must be official two-digit venue codes 01 through 24")
     if not 1 <= race_start <= race_end <= 12:
         raise ValueError("race range must be between 1 and 12")
+    if len(set(venues)) != len(venues):
+        raise ValueError("venues must not contain duplicates")
     return dates
 
 
@@ -77,46 +79,57 @@ def collect_outcome_day(
 
 
 def collect_outcome_archive_day(
-    race_date: str, venue_code: str, *, race_start: int = 1, race_end: int = 12
+    race_date: str,
+    venue_codes: str | tuple[str, ...],
+    *,
+    race_start: int = 1,
+    race_end: int = 12,
 ) -> tuple[RaceSnapshot, ...]:
     """Collect complete races from the official daily B/K LZH archives.
 
-    This path performs two official downloads per day, rather than one result
-    request plus one racelist request per race. Odds are deliberately excluded.
-    A venue may have no races on a given day; a race missing either a complete
-    program or a result is skipped rather than inferred.
+    The official daily archives contain all venues. For a batch request, the
+    B and K archives are fetched exactly once for the date and then parsed for
+    each requested venue. Odds are deliberately excluded. A race missing
+    either a complete program or a result is skipped rather than inferred.
+
+    The string form is retained for the single-venue API used by existing
+    callers; the tuple form is the batch path and avoids 24 duplicate downloads.
     """
+    venues = (venue_codes,) if isinstance(venue_codes, str) else venue_codes
     validate_batch_range(
         start=race_date,
         end=race_date,
-        venues=(venue_code,),
+        venues=venues,
         race_start=race_start,
         race_end=race_end,
     )
+
     program = fetch_program_archive(race_date)
     result = fetch_result_archive(race_date)
-    programs = parse_program_text(program.text, race_date, venue_code)
-    results = parse_result_text(result.text, venue_code)
-    if not programs or not results:
-        return ()
     documents = archive_documents(program, result)
     snapshots: list[RaceSnapshot] = []
-    for race_number in range(race_start, race_end + 1):
-        if race_number not in programs or race_number not in results:
+
+    for venue_code in venues:
+        programs = parse_program_text(program.text, race_date, venue_code)
+        results = parse_result_text(result.text, venue_code)
+        if not programs or not results:
             continue
-        deadline, entries = programs[race_number]
-        snapshots.append(
-            RaceSnapshot(
-                f"{race_date}-{venue_code}-{race_number:02d}",
-                race_date,
-                venue_code,
-                race_number,
-                deadline,
-                entries,
-                (),
-                "UNKNOWN",
-                results[race_number],
-                documents,
+        for race_number in range(race_start, race_end + 1):
+            if race_number not in programs or race_number not in results:
+                continue
+            deadline, entries = programs[race_number]
+            snapshots.append(
+                RaceSnapshot(
+                    f"{race_date}-{venue_code}-{race_number:02d}",
+                    race_date,
+                    venue_code,
+                    race_number,
+                    deadline,
+                    entries,
+                    (),
+                    "UNKNOWN",
+                    results[race_number],
+                    documents,
+                )
             )
-        )
     return tuple(snapshots)
