@@ -119,27 +119,13 @@ def parse_odds3t(payload: str) -> tuple[OddsRecord, ...]:
 
 
 def parse_result(payload: str) -> ResultRecord:
-    soup = BeautifulSoup(payload, "html.parser")
-    three = two = None
-    for row in soup.find_all("tr"):
-        cells = [_clean(c.get_text(" ")) for c in row.find_all(["th", "td"])]
-        if not cells:
-            continue
-        if cells[0] == "3連単":
-            three = cells
-        elif cells[0] == "2連単":
-            two = cells
-    if not three or not two:
-        raise ValueError("official result payout rows not found")
-    combo3 = re.search(r"[1-6]-[1-6]-[1-6]", " ".join(three))
-    combo2 = re.search(r"[1-6]-[1-6]", " ".join(two))
-    payout3 = next((c for c in three if "¥" in c), None)
-    payout2 = next((c for c in two if "¥" in c), None)
-    if not combo3 or not combo2 or not payout3 or not payout2:
+    page_text = _clean(BeautifulSoup(payload, "html.parser").get_text(" "))
+    match3 = re.search(r"3連単\s+([1-6]-[1-6]-[1-6])\s+¥([0-9,]+)", page_text)
+    match2 = re.search(r"2連単\s+([1-6]-[1-6])\s+¥([0-9,]+)", page_text)
+    if not match3 or not match2:
         raise ValueError("official result combination or payout missing")
-    page_text = _clean(soup.get_text(" "))
-    decision = next((d for d in DECISIONS if f"決まり手 {d}" in page_text), "UNKNOWN")
-    return ResultRecord(combo3.group(0), Decimal(re.sub(r"[^0-9.]", "", payout3)), combo2.group(0), Decimal(re.sub(r"[^0-9.]", "", payout2)), decision)
+    decision = next((d for d in DECISIONS if re.search(rf"決まり手\s+{re.escape(d)}", page_text)), "UNKNOWN")
+    return ResultRecord(match3.group(1), Decimal(match3.group(2).replace(",", "")), match2.group(1), Decimal(match2.group(2).replace(",", "")), decision)
 
 
 def collect_race(race_date: str, venue_code: str, race_number: int) -> RaceSnapshot:
