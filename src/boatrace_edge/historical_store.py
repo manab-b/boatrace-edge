@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import timezone
-
 import psycopg
 
 from .historical import RaceSnapshot
@@ -19,34 +17,20 @@ def store_snapshot(database_url: str, snapshot: RaceSnapshot) -> None:
                     VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (content_sha256) DO NOTHING
                     """,
-                    (
-                        document.source_url,
-                        document.fetched_at,
-                        document.content_sha256,
-                        document.content_type,
-                        document.payload,
-                    ),
+                    (document.source_url, document.fetched_at, document.content_sha256, document.content_type, document.payload),
                 )
-                cur.execute(
-                    "SELECT document_id::text FROM raw_document WHERE content_sha256 = %s",
-                    (document.content_sha256,),
-                )
+                cur.execute("SELECT document_id::text FROM raw_document WHERE content_sha256 = %s", (document.content_sha256,))
                 document_ids[document.source_url] = cur.fetchone()[0]
 
             cur.execute(
                 """
-                INSERT INTO race (race_id, race_date, venue_code, race_number, scheduled_start_at, scheduled_deadline_at)
-                VALUES (%s, %s, %s, %s, NULL, %s)
-                ON CONFLICT (race_id) DO UPDATE
-                SET scheduled_deadline_at = EXCLUDED.scheduled_deadline_at
+                INSERT INTO race (race_id, race_date, venue_code, race_number, scheduled_start_at, scheduled_deadline_at, odds_status)
+                VALUES (%s, %s, %s, %s, NULL, %s, %s)
+                ON CONFLICT (race_id) DO UPDATE SET
+                    scheduled_deadline_at = EXCLUDED.scheduled_deadline_at,
+                    odds_status = EXCLUDED.odds_status
                 """,
-                (
-                    snapshot.race_id,
-                    snapshot.race_date,
-                    snapshot.venue_code,
-                    snapshot.race_number,
-                    snapshot.scheduled_deadline_at,
-                ),
+                (snapshot.race_id, snapshot.race_date, snapshot.venue_code, snapshot.race_number, snapshot.scheduled_deadline_at, snapshot.odds_status),
             )
 
             for entry in snapshot.entries:
@@ -59,19 +43,19 @@ def store_snapshot(database_url: str, snapshot: RaceSnapshot) -> None:
                     (snapshot.race_id, entry.lane, entry.racer_id),
                 )
 
-            odds_document_id = document_ids[snapshot.raw_documents[1].source_url]
-            for odd in snapshot.odds:
-                cur.execute(
-                    """
-                    INSERT INTO historical_odds
-                        (race_id, combination, odds, as_of_at, as_of_basis, source_document_id)
-                    VALUES (%s, %s, %s, NULL, 'CLOSING_ODDS_WITHOUT_SOURCE_TIMESTAMP', %s)
-                    ON CONFLICT (race_id, combination) DO UPDATE
-                    SET odds = EXCLUDED.odds,
-                        source_document_id = EXCLUDED.source_document_id
-                    """,
-                    (snapshot.race_id, odd.combination, odd.odds, odds_document_id),
-                )
+            if snapshot.odds_status == "COMPLETE":
+                odds_document_id = document_ids[snapshot.raw_documents[1].source_url]
+                for odd in snapshot.odds:
+                    cur.execute(
+                        """
+                        INSERT INTO historical_odds
+                            (race_id, combination, odds, as_of_at, as_of_basis, source_document_id)
+                        VALUES (%s, %s, %s, NULL, 'CLOSING_ODDS_WITHOUT_SOURCE_TIMESTAMP', %s)
+                        ON CONFLICT (race_id, combination) DO UPDATE
+                        SET odds = EXCLUDED.odds, source_document_id = EXCLUDED.source_document_id
+                        """,
+                        (snapshot.race_id, odd.combination, odd.odds, odds_document_id),
+                    )
 
             cur.execute(
                 """
