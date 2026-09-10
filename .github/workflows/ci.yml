@@ -38,11 +38,56 @@ jobs:
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/002_historical_data.sql
       - name: Validate odds coverage migration
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/003_odds_coverage.sql
-      - name: Ingest one real official historical race
-        run: python -m boatrace_edge.ingest --date 20260226 --venue 04 --race 1
+      - name: Ingest real official historical training periods
+        run: |
+          set -euo pipefail
+          for date in 20260201 20260223 20260226; do
+            for race in $(seq 1 12); do
+              python -m boatrace_edge.ingest --date "$date" --venue 04 --race "$race"
+            done
+          done
+      - name: Verify real historical training dataset
+        run: |
+          set -euo pipefail
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race')" = "36"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM entry')" = "216"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race_result')" = "36"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(DISTINCT scheduled_deadline_at::date) FROM race')" = "3"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race WHERE odds_status = ''INCOMPLETE_SOURCE_RESPONSE''')" = "36"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM historical_odds')" = "0"
+      - name: Evaluate baseline on temporal holdout
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from boatrace_edge.dataset import load_lane_outcomes, temporal_holdout
+          from boatrace_edge.evaluation import evaluate_lane_baseline
+
+          rows = load_lane_outcomes(os.environ["DATABASE_URL"])
+          race_count = len({row.race_id for row in rows})
+          assert race_count == 36
+          split = temporal_holdout(rows, holdout_races=12)
+          result = evaluate_lane_baseline(split)
+          assert result.train_races == 24
+          assert result.holdout_races == 12
+          assert result.holdout_rows == 72
+          assert result.train_end_cutoff_at < result.holdout_start_cutoff_at
+          assert result.metrics.log_loss >= 0
+          assert result.metrics.brier_score >= 0
+          print(json.dumps({
+              "model_version": result.model_version,
+              "train_races": result.train_races,
+              "holdout_races": result.holdout_races,
+              "holdout_rows": result.holdout_rows,
+              "train_end_cutoff_at": result.train_end_cutoff_at.isoformat(),
+              "holdout_start_cutoff_at": result.holdout_start_cutoff_at.isoformat(),
+              "log_loss": str(result.metrics.log_loss),
+              "brier_score": str(result.metrics.brier_score),
+              "calibration_bins": len(result.calibration),
+          }, ensure_ascii=False))
+          PY
       - name: Verify historical records
         run: |
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM raw_document')" = "3"
           test "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM entry WHERE race_id = '20260226-04-01'")" = "6"
           test "$(psql "$DATABASE_URL" -tAc "SELECT odds_status FROM race WHERE race_id = '20260226-04-01'")" = "INCOMPLETE_SOURCE_RESPONSE"
           test "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM historical_odds WHERE race_id = '20260226-04-01'")" = "0"
