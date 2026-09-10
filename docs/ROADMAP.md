@@ -23,7 +23,7 @@
 | Foundation implementation | COMPLETE | Sufficient for the foundation gate |
 | Foundation verification | COMPLETE | GitHub Actions passed pytest and PostgreSQL migration validation |
 | Historical data engine | COMPLETE | Real official-source vertical slice passed end-to-end in CI |
-| Probability model | **IN PROGRESS** | PIT-safe lane baseline, dataset assembly, temporal split, calibration metrics, and official bulk outcome ingestion are implemented; historical training volume is still insufficient for the model gate |
+| Probability model | **IN PROGRESS** | PIT-safe lane baseline, dataset assembly, temporal split, calibration metrics, official daily LZH bulk acquisition, and batch persistence are implemented; the 10,000-race / 90-day research-volume gate is being verified in CI |
 | EV engine | BLOCKED | Must wait for valid probabilities + timestamped odds |
 | Walk-forward research | BLOCKED | Must wait for PIT dataset/model |
 | Signal selection | BLOCKED | Must wait for OOS evidence |
@@ -78,12 +78,13 @@ Phase 2 becomes COMPLETE only when all are true:
 - Deterministic binary log-loss and Brier-score evaluation.
 - Calibration-bin calculation.
 - Tests for model invariants, malformed rows, temporal separation, deterministic evaluation, probability bounds, and calibration metrics.
-- Official-source bulk outcome collector that fetches the official result list once per venue/day and official pre-race entry pages per selected race, deliberately excluding odds from the Phase 2 ingestion path.
-- Batch CLI support for inclusive date ranges, official venues 01–24, and race ranges 1–12.
+- Official-source bulk outcome collector using the daily B/K LZH archives: two official downloads per day instead of per-race HTML acquisition, Shift-JIS decoding, venue/race boundary validation, complete six-lane program validation, and official result/payout extraction.
+- Batch persistence in one PostgreSQL transaction per venue/day; incomplete or absent races are skipped rather than inferred.
+- Batch CLI supports inclusive date ranges, official venues 01–24, race ranges 1–12, and the archive source explicitly.
 
 ### Current blocker
 
-The repository currently proves only one real historical race end-to-end in CI. The model code, PIT-safe evaluation pipeline, and bulk collector are ready, but the 10,000-race / 90-day real historical dataset has not yet been collected and evaluated. No synthetic rows are used in the production ingestion/evaluation path, and no model is marked production-ready from insufficient data.
+The previous CI proof covered 36 real races across three dates. The repository now has a dedicated official daily-archive acquisition path and CI gate for the required **10,000 complete races across 90+ calendar days with at least 1,000 train and 1,000 holdout races**. Phase 2 remains IN PROGRESS until that real-data CI evaluation passes. No synthetic rows are used in the production ingestion/evaluation path.
 
 ## Phase Progress
 
@@ -91,7 +92,7 @@ The repository currently proves only one real historical race end-to-end in CI. 
 |---|---|---|
 | Phase 0 — Foundation | **COMPLETE** | Tests + PostgreSQL migration passed in CI |
 | Phase 1 — Historical Data Engine | **COMPLETE** | Official-source vertical slice + raw immutability + explicit odds coverage + CI smoke test passed |
-| Phase 2 — Baseline Probability Model | **IN PROGRESS** | PIT-safe dataset + baseline + metrics + temporal evaluation + bulk collector implemented; needs 10,000 real races across 90+ days |
+| Phase 2 — Baseline Probability Model | **IN PROGRESS** | PIT-safe dataset + baseline + metrics + temporal evaluation + official archive bulk collector implemented; CI must prove 10,000 real races across 90+ days |
 | Phase 3 — Market / EV Engine | BLOCKED | Valid PIT odds + settlement model |
 | Phase 4 — Backtest / Walk-Forward | BLOCKED | Point-in-time + OOS integrity |
 | Phase 5 — Signal Selection | BLOCKED | Positive OOS evidence |
