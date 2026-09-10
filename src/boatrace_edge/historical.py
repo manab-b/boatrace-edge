@@ -55,6 +55,7 @@ class RaceSnapshot:
     scheduled_deadline_at: datetime
     entries: tuple[EntryRecord, ...]
     odds: tuple[OddsRecord, ...]
+    odds_status: str
     result: ResultRecord
     raw_documents: tuple[RawDocument, ...]
 
@@ -68,13 +69,7 @@ def _fetch(url: str) -> RawDocument:
     with urlopen(request, timeout=30) as response:
         payload = response.read().decode("utf-8", errors="strict")
         content_type = response.headers.get_content_type()
-    return RawDocument(
-        source_url=url,
-        fetched_at=datetime.now(timezone.utc),
-        content_sha256=hashlib.sha256(payload.encode("utf-8")).hexdigest(),
-        content_type=content_type,
-        payload=payload,
-    )
+    return RawDocument(url, datetime.now(timezone.utc), hashlib.sha256(payload.encode("utf-8")).hexdigest(), content_type, payload)
 
 
 def racelist_url(race_date: str, venue_code: str, race_number: int) -> str:
@@ -85,54 +80,21 @@ def odds_url(race_date: str, venue_code: str, race_number: int) -> str:
     return f"{OFFICIAL_BASE}/odds3t?hd={race_date}&jcd={venue_code}&rno={race_number}"
 
 
-def resultlist_url(race_date: str, venue_code: str) -> str:
-    return f"{OFFICIAL_BASE}/resultlist?hd={race_date}&jcd={venue_code}"
+def result_url(race_date: str, venue_code: str, race_number: int) -> str:
+    return f"{OFFICIAL_BASE}/raceresult?hd={race_date}&jcd={venue_code}&rno={race_number}"
 
 
-def parse_racelist(
-    payload: str, race_date: str, race_number: int
-) -> tuple[datetime, tuple[EntryRecord, ...]]:
+def parse_racelist(payload: str, race_date: str, race_number: int) -> tuple[datetime, tuple[EntryRecord, ...]]:
     soup = BeautifulSoup(payload, "html.parser")
     page_text = _clean(soup.get_text(" "))
     match = re.search(r"締切予定時刻\s+((?:\d{2}:\d{2}\s+){11}\d{2}:\d{2})", page_text)
     if not match:
         raise ValueError("official racelist did not contain 12 scheduled deadlines")
-    deadlines = match.group(1).split()
-    deadline = datetime.combine(
-        datetime.strptime(race_date, "%Y%m%d").date(),
-        time.fromisoformat(deadlines[race_number - 1]),
-        JST,
-    )
-
-    identity_matches = re.findall(
-        r"\b(\d{4})\s*/\s*[A-Z]\d\s+(.{1,20}?)\s+[^ /]+/[^ /]+\s+\d+歳/",
-        page_text,
-    )
+    deadline = datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), time.fromisoformat(match.group(1).split()[race_number - 1]), JST)
+    identity_matches = re.findall(r"\b(\d{4})\s*/\s*[A-Z]\d\s+(.{1,20}?)\s+[^ /]+/[^ /]+\s+\d+歳/", page_text)
     if len(identity_matches) >= 6:
-        return deadline, tuple(
-            EntryRecord(lane, racer_id, _clean(name))
-            for lane, (racer_id, name) in enumerate(identity_matches[:6], start=1)
-        )
-
-    target = next((t for t in soup.find_all("table") if "登録番号/級別" in t.get_text(" ")), None)
-    if target is None:
-        raise ValueError("official racelist entry table not found")
-    entries: list[EntryRecord] = []
-    for row in target.find_all("tr"):
-        cells = [_clean(c.get_text(" ")) for c in row.find_all(["th", "td"])]
-        if not cells or cells[0] not in {str(i) for i in range(1, 7)}:
-            continue
-        lane = int(cells[0])
-        racer_match = re.search(r"\b(\d{4})\b", " ".join(cells))
-        if not racer_match:
-            raise ValueError(f"racer registration number missing for lane {lane}")
-        names = [_clean(a.get_text(" ")) for a in row.find_all("a") if _clean(a.get_text(" "))]
-        if not names:
-            raise ValueError(f"racer name missing for lane {lane}")
-        entries.append(EntryRecord(lane, racer_match.group(1), names[0]))
-    if len(entries) != 6:
-        raise ValueError(f"expected 6 entries, got {len(entries)}")
-    return deadline, tuple(entries)
+        return deadline, tuple(EntryRecord(lane, rid, _clean(name)) for lane, (rid, name) in enumerate(identity_matches[:6], start=1))
+    raise ValueError("official racelist did not expose six racer identities in a stable form")
 
 
 def parse_odds3t(payload: str) -> tuple[OddsRecord, ...]:
@@ -140,18 +102,15 @@ def parse_odds3t(payload: str) -> tuple[OddsRecord, ...]:
     page_text = _clean(soup.get_text(" "))
     if "3連単オッズ" not in page_text:
         raise ValueError("official 3T odds section not found")
-    section = page_text.split("3連単オッズ", 1)[1]
-    section = section.split("締切時オッズは", 1)[0]
+    section = page_text.split("3連単オッズ", 1)[1].split("締切時オッズは", 1)[0]
     tokens = re.findall(r"\d+(?:\.\d+)?", section)
     if len(tokens) != 360:
         raise ValueError(f"expected 360 numeric 3T odds tokens, got {len(tokens)}")
-
     records: list[OddsRecord] = []
     for row_index in range(20):
         row = tokens[row_index * 18 : (row_index + 1) * 18]
         for first in range(1, 7):
-            second = int(row[(first - 1) * 3])
-            third = int(row[(first - 1) * 3 + 1])
+            second, third = int(row[(first - 1) * 3]), int(row[(first - 1) * 3 + 1])
             odds = Decimal(row[(first - 1) * 3 + 2])
             if len({first, second, third}) != 3:
                 raise ValueError("invalid 3T combination in official odds")
@@ -159,24 +118,28 @@ def parse_odds3t(payload: str) -> tuple[OddsRecord, ...]:
     return tuple(records)
 
 
-def parse_resultlist(payload: str, race_number: int) -> ResultRecord:
+def parse_result(payload: str) -> ResultRecord:
     soup = BeautifulSoup(payload, "html.parser")
+    three = two = None
     for row in soup.find_all("tr"):
         cells = [_clean(c.get_text(" ")) for c in row.find_all(["th", "td"])]
-        if not cells or cells[0] != f"{race_number}R":
+        if not cells:
             continue
-        joined = " ".join(cells)
-        combos = re.findall(r"([1-6])\s*-\s*([1-6])(?:\s*-\s*([1-6]))?", joined)
-        payout_cells = [c for c in cells if "¥" in c]
-        if len(combos) < 2 or len(payout_cells) < 2:
-            continue
-        combination_3t = "-".join(x for x in combos[0] if x)
-        combination_2t = "-".join(x for x in combos[1][:2] if x)
-        payout_3t = Decimal(re.sub(r"[^0-9.]", "", payout_cells[0]))
-        payout_2t = Decimal(re.sub(r"[^0-9.]", "", payout_cells[1]))
-        decision = next((c for c in reversed(cells) if c in DECISIONS), "UNKNOWN")
-        return ResultRecord(combination_3t, payout_3t, combination_2t, payout_2t, decision)
-    raise ValueError(f"3T/2T payout row not found for {race_number}R")
+        if cells[0] == "3連単":
+            three = cells
+        elif cells[0] == "2連単":
+            two = cells
+    if not three or not two:
+        raise ValueError("official result payout rows not found")
+    combo3 = re.search(r"[1-6]-[1-6]-[1-6]", " ".join(three))
+    combo2 = re.search(r"[1-6]-[1-6]", " ".join(two))
+    payout3 = next((c for c in three if "¥" in c), None)
+    payout2 = next((c for c in two if "¥" in c), None)
+    if not combo3 or not combo2 or not payout3 or not payout2:
+        raise ValueError("official result combination or payout missing")
+    page_text = _clean(soup.get_text(" "))
+    decision = next((d for d in DECISIONS if f"決まり手 {d}" in page_text), "UNKNOWN")
+    return ResultRecord(combo3.group(0), Decimal(re.sub(r"[^0-9.]", "", payout3)), combo2.group(0), Decimal(re.sub(r"[^0-9.]", "", payout2)), decision)
 
 
 def collect_race(race_date: str, venue_code: str, race_number: int) -> RaceSnapshot:
@@ -186,22 +149,15 @@ def collect_race(race_date: str, venue_code: str, race_number: int) -> RaceSnaps
         raise ValueError("venue_code must be a two-digit official venue code")
     if not 1 <= race_number <= 12:
         raise ValueError("race_number must be between 1 and 12")
-
     racelist = _fetch(racelist_url(race_date, venue_code, race_number))
     odds = _fetch(odds_url(race_date, venue_code, race_number))
-    results = _fetch(resultlist_url(race_date, venue_code))
+    results = _fetch(result_url(race_date, venue_code, race_number))
     deadline, entries = parse_racelist(racelist.payload, race_date, race_number)
-    parsed_odds = parse_odds3t(odds.payload)
-    result = parse_resultlist(results.payload, race_number)
-    race_id = f"{race_date}-{venue_code}-{race_number:02d}"
-    return RaceSnapshot(
-        race_id=race_id,
-        race_date=race_date,
-        venue_code=venue_code,
-        race_number=race_number,
-        scheduled_deadline_at=deadline,
-        entries=entries,
-        odds=parsed_odds,
-        result=result,
-        raw_documents=(racelist, odds, results),
-    )
+    try:
+        parsed_odds = parse_odds3t(odds.payload)
+        odds_status = "COMPLETE"
+    except ValueError:
+        parsed_odds = ()
+        odds_status = "INCOMPLETE_SOURCE_RESPONSE"
+    result = parse_result(results.payload)
+    return RaceSnapshot(f"{race_date}-{venue_code}-{race_number:02d}", race_date, venue_code, race_number, deadline, entries, parsed_odds, odds_status, result, (racelist, odds, results))
