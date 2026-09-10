@@ -4,8 +4,8 @@ import argparse
 import os
 
 from .historical import collect_race
-from .historical_batch import collect_outcome_day, validate_batch_range
-from .historical_store import store_snapshot
+from .historical_batch import collect_outcome_archive_day, collect_outcome_day, validate_batch_range
+from .historical_store import store_snapshot, store_snapshots
 
 
 def main() -> None:
@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--venues", help="comma-separated official venue codes, 01 through 24")
     parser.add_argument("--race-start", type=int, default=1, choices=range(1, 13))
     parser.add_argument("--race-end", type=int, default=12, choices=range(1, 13))
+    parser.add_argument("--source", choices=("archive", "html"), default="archive")
     parser.add_argument("--database-url", default=os.environ.get("DATABASE_URL"))
     args = parser.parse_args()
     if not args.database_url:
@@ -40,16 +41,23 @@ def main() -> None:
         count = 0
         for race_date in dates:
             for venue in venues:
-                snapshots = collect_outcome_day(
-                    race_date,
-                    venue,
-                    race_start=args.race_start,
-                    race_end=args.race_end,
+                snapshots = (
+                    collect_outcome_archive_day(
+                        race_date,
+                        venue,
+                        race_start=args.race_start,
+                        race_end=args.race_end,
+                    )
+                    if args.source == "archive"
+                    else collect_outcome_day(
+                        race_date,
+                        venue,
+                        race_start=args.race_start,
+                        race_end=args.race_end,
+                    )
                 )
-                for snapshot in snapshots:
-                    store_snapshot(args.database_url, snapshot)
-                    count += 1
-        print(f"ingested official outcome races={count} dates={len(dates)} venues={len(venues)}")
+                count += store_snapshots(args.database_url, snapshots)
+        print(f"ingested official outcome races={count} dates={len(dates)} venues={len(venues)} source={args.source}")
         return
 
     if not args.date or not args.venue or args.race is None:
