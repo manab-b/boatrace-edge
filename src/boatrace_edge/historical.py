@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 
 OFFICIAL_BASE = "https://www.boatrace.jp/owpc/pc/race"
 JST = timezone(timedelta(hours=9))
+DECISIONS = {"逃げ", "差し", "まくり", "まくり差し", "抜き"}
 
 
 @dataclass(frozen=True)
@@ -113,8 +114,7 @@ def parse_racelist(
         if not cells or cells[0] not in {str(i) for i in range(1, 7)}:
             continue
         lane = int(cells[0])
-        row_text = " ".join(cells)
-        racer_match = re.search(r"\b(\d{4})\b", row_text)
+        racer_match = re.search(r"\b(\d{4})\b", " ".join(cells))
         if not racer_match:
             raise ValueError(f"racer registration number missing for lane {lane}")
         names = [
@@ -159,29 +159,22 @@ def parse_odds3t(payload: str) -> tuple[OddsRecord, ...]:
 
 def parse_resultlist(payload: str, race_number: int) -> ResultRecord:
     soup = BeautifulSoup(payload, "html.parser")
-    rows = soup.find_all("tr")
-    payout_3t = payout_2t = None
-    combination_3t = combination_2t = None
-    decision = "UNKNOWN"
-
-    for row in rows:
+    for row in soup.find_all("tr"):
         cells = [_clean(c.get_text(" ")) for c in row.find_all(["th", "td"])]
         if not cells or cells[0] != f"{race_number}R":
             continue
         joined = " ".join(cells)
         combos = re.findall(r"([1-6])\s*-\s*([1-6])(?:\s*-\s*([1-6]))?", joined)
-        amounts = re.findall(r"¥?([0-9,]+)", joined)
-        if len(combos) >= 2 and len(amounts) >= 2:
-            combination_3t = "-".join(x for x in combos[0] if x)
-            combination_2t = "-".join(x for x in combos[1][:2] if x)
-            payout_3t = Decimal(amounts[-2].replace(",", ""))
-            payout_2t = Decimal(amounts[-1].replace(",", ""))
-            decision = cells[-1] if cells[-1] else "UNKNOWN"
-            break
-
-    if combination_3t is None or payout_3t is None or combination_2t is None or payout_2t is None:
-        raise ValueError(f"3T/2T payout row not found for {race_number}R")
-    return ResultRecord(combination_3t, payout_3t, combination_2t, payout_2t, decision)
+        payout_cells = [c for c in cells if "¥" in c]
+        if len(combos) < 2 or len(payout_cells) < 2:
+            continue
+        combination_3t = "-".join(x for x in combos[0] if x)
+        combination_2t = "-".join(x for x in combos[1][:2] if x)
+        payout_3t = Decimal(re.sub(r"[^0-9.]", "", payout_cells[0]))
+        payout_2t = Decimal(re.sub(r"[^0-9.]", "", payout_cells[1]))
+        decision = next((c for c in reversed(cells) if c in DECISIONS), "UNKNOWN")
+        return ResultRecord(combination_3t, payout_3t, combination_2t, payout_2t, decision)
+    raise ValueError(f"3T/2T payout row not found for {race_number}R")
 
 
 def collect_race(race_date: str, venue_code: str, race_number: int) -> RaceSnapshot:
