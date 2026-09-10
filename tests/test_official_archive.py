@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -28,6 +28,9 @@ FINALK
 """
 
 
+JST = timezone(timedelta(hours=9))
+
+
 def test_archive_urls_use_official_daily_pattern() -> None:
     assert program_archive_url("20260101") == "http://www1.mbrace.or.jp/od2/B/202601/b260101.lzh"
     assert result_archive_url("20260101") == "http://www1.mbrace.or.jp/od2/K/202601/k260101.lzh"
@@ -36,7 +39,7 @@ def test_archive_urls_use_official_daily_pattern() -> None:
 def test_program_parser_extracts_point_in_time_deadline_and_six_lanes() -> None:
     races = parse_program_text(PROGRAM_FIXTURE, "20220101", "24")
     deadline, entries = races[1]
-    assert deadline == datetime(2022, 1, 1, 15, 15, tzinfo=timezone.utc).astimezone(timezone.utc).replace(tzinfo=deadline.tzinfo)
+    assert deadline == datetime(2022, 1, 1, 15, 15, tzinfo=JST)
     assert [entry.lane for entry in entries] == [1, 2, 3, 4, 5, 6]
     assert [entry.racer_id for entry in entries] == ["4966", "4705", "5055", "5011", "4969", "4299"]
 
