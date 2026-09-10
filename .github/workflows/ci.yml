@@ -41,25 +41,28 @@ jobs:
       - name: Ingest real official historical training periods
         run: |
           set -euo pipefail
-          for date in 20260201 20260223 20260226; do
-            python -m boatrace_edge.ingest \
-              --date-from "$date" \
-              --date-to "$date" \
-              --venues 04 \
-              --race-start 1 \
-              --race-end 12
-          done
+          python -m boatrace_edge.ingest \
+            --date-from 20260101 \
+            --date-to 20260331 \
+            --venues 01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 \
+            --race-start 1 \
+            --race-end 12 \
+            --source archive
           python -m boatrace_edge.ingest --date 20260226 --venue 04 --race 1
-      - name: Verify real historical training dataset
+      - name: Verify research-volume historical dataset
         run: |
           set -euo pipefail
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race')" = "36"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM entry')" = "216"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race_result')" = "36"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(DISTINCT scheduled_deadline_at::date) FROM race')" = "3"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race WHERE odds_status = ''UNKNOWN''')" = "35"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race WHERE odds_status = ''INCOMPLETE_SOURCE_RESPONSE''')" = "1"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM historical_odds')" = "0"
+          race_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race')"
+          entry_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM entry')"
+          result_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race_result')"
+          date_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(DISTINCT scheduled_deadline_at::date) FROM race')"
+          test "$race_count" -ge 10000
+          test "$entry_count" -eq "$((race_count * 6))"
+          test "$result_count" -eq "$race_count"
+          test "$date_count" -ge 90
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race WHERE odds_status = ''UNKNOWN''')" -eq "$race_count"
+          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM historical_odds')" -eq 0
+          echo "research dataset: races=$race_count entries=$entry_count results=$result_count dates=$date_count"
       - name: Evaluate baseline on temporal holdout
         run: |
           python - <<'PY'
@@ -70,17 +73,18 @@ jobs:
 
           rows = load_lane_outcomes(os.environ["DATABASE_URL"])
           race_count = len({row.race_id for row in rows})
-          assert race_count == 36
-          split = temporal_holdout(rows, holdout_races=12)
+          assert race_count >= 10000
+          split = temporal_holdout(rows, holdout_races=2000)
           result = evaluate_lane_baseline(split)
-          assert result.train_races == 24
-          assert result.holdout_races == 12
-          assert result.holdout_rows == 72
+          assert result.train_races >= 8000
+          assert result.holdout_races == 2000
+          assert result.holdout_rows == 12000
           assert result.train_end_cutoff_at < result.holdout_start_cutoff_at
           assert result.metrics.log_loss >= 0
           assert result.metrics.brier_score >= 0
           print(json.dumps({
               "model_version": result.model_version,
+              "total_races": race_count,
               "train_races": result.train_races,
               "holdout_races": result.holdout_races,
               "holdout_rows": result.holdout_rows,
