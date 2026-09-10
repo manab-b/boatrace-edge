@@ -82,6 +82,8 @@ def _venue_blocks(text: str, marker: str) -> dict[str, list[str]]:
     for line in lines:
         begin = re.match(r"^\s*(\d{2})" + re.escape(marker) + r"BGN\s*$", line)
         if begin:
+            if current is not None:
+                raise ValueError("nested official archive venue boundaries")
             venue = begin.group(1)
             current = []
             continue
@@ -101,31 +103,45 @@ def _venue_blocks(text: str, marker: str) -> dict[str, list[str]]:
 
 
 def _parse_race_header(line: str) -> int | None:
-    match = re.match(r"^\s*(\d{1,2})R\b", line)
+    match = re.match(r"^\s*(\d{1,2})R(?:\s|$)", line)
     return int(match.group(1)) if match else None
+
+
+def _entry_from_line(line: str) -> EntryRecord | None:
+    match = re.match(r"^\s*([1-6])\s+(\d{4})(.*)$", line)
+    if not match:
+        return None
+    return EntryRecord(int(match.group(1)), match.group(2), "UNKNOWN")
 
 
 def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, tuple[datetime, tuple[EntryRecord, ...]]]:
     if not re.fullmatch(r"\d{8}", race_date):
         raise ValueError("race_date must be YYYYMMDD")
+    if not re.fullmatch(r"\d{2}", venue_code):
+        raise ValueError("venue_code must be a two-digit official venue code")
     blocks = _venue_blocks(text, "B")
     if venue_code not in blocks:
         return {}
-    lines = blocks[venue_code]
+
     races: dict[int, tuple[datetime, tuple[EntryRecord, ...]]] = {}
     current_race: int | None = None
     deadline: time | None = None
     entries: dict[int, EntryRecord] = {}
-    for line in lines:
+
+    def finish_current() -> None:
+        if current_race is None:
+            return
+        if deadline is None or set(entries) != set(range(1, 7)):
+            raise ValueError(f"incomplete program data for {current_race}R")
+        races[current_race] = (
+            datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST),
+            tuple(entries[i] for i in range(1, 7)),
+        )
+
+    for line in blocks[venue_code]:
         race = _parse_race_header(line)
         if race is not None:
-            if current_race is not None:
-                if deadline is None or set(entries) != set(range(1, 7)):
-                    raise ValueError(f"incomplete program data for {current_race}R")
-                races[current_race] = (
-                    datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST),
-                    tuple(entries[i] for i in range(1, 7)),
-                )
+            finish_current()
             current_race = race
             deadline = None
             entries = {}
@@ -135,20 +151,13 @@ def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, 
         deadline_match = re.search(r"締切予定\s*(\d{1,2}):(\d{2})", line)
         if deadline_match:
             deadline = time(int(deadline_match.group(1)), int(deadline_match.group(2)))
-        entry_match = re.match(r"^\s*([1-6])\s+(\d{4})(.*)$", line)
-        if entry_match:
-            lane = int(entry_match.group(1))
-            racer_id = entry_match.group(2)
-            if lane in entries:
-                raise ValueError(f"duplicate program lane {lane} in {current_race}R")
-            entries[lane] = EntryRecord(lane, racer_id, "UNKNOWN")
-    if current_race is not None:
-        if deadline is None or set(entries) != set(range(1, 7)):
-            raise ValueError(f"incomplete program data for {current_race}R")
-        races[current_race] = (
-            datetime.combine(datetime.strptime(race_date, "%Y%m%d").date(), deadline, JST),
-            tuple(entries[i] for i in range(1, 7)),
-        )
+        entry = _entry_from_line(line)
+        if entry is not None:
+            if entry.lane in entries:
+                raise ValueError(f"duplicate program lane {entry.lane} in {current_race}R")
+            entries[entry.lane] = entry
+
+    finish_current()
     return races
 
 
@@ -158,14 +167,16 @@ def parse_result_text(text: str, venue_code: str) -> dict[int, ResultRecord]:
         return {}
     results: dict[int, ResultRecord] = {}
     for line in blocks[venue_code]:
-        match = re.match(
-            r"^\s*(\d{1,2})R\s+([1-6])-([1-6])-([1-6])\s+([0-9,]+)\s+([1-6])-([1-6])\s+([0-9,]+)\s+([0-6-]+)\s+([0-9,]+)",
-            line,
+        normalized = line.replace("[払戻金]", "")
+        match = re.search(
+            r"^\s*(\d{1,2})R\s+([1-6])\s*-\s*([1-6])\s*-\s*([1-6])\s+([0-9,]+)\s+"
+            r"(?:[1-6]\s*-\s*[1-6]\s+[0-9,]+\s+)?"
+            r"([1-6])\s*-\s*([1-6])\s+([0-9,]+)",
+            normalized,
         )
         if not match:
             continue
-        race_number = int(match.group(1))
-        results[race_number] = ResultRecord(
+        results[int(match.group(1))] = ResultRecord(
             f"{match.group(2)}-{match.group(3)}-{match.group(4)}",
             Decimal(match.group(5).replace(",", "")),
             f"{match.group(6)}-{match.group(7)}",
