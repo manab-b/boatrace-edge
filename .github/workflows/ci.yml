@@ -60,7 +60,7 @@ jobs:
           test "$entry_count" -eq "$((race_count * 6))"
           test "$result_count" -eq "$race_count"
           test "$date_count" -ge 90
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race WHERE odds_status = ''UNKNOWN''')" -eq "$race_count"
+          test "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM race WHERE odds_status = 'UNKNOWN'")" -eq "$race_count"
           test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM historical_odds')" -eq 0
           echo "research dataset: races=$race_count entries=$entry_count results=$result_count dates=$date_count"
       - name: Evaluate baseline on temporal holdout
