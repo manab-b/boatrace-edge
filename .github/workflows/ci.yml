@@ -46,7 +46,8 @@ jobs:
             date_arg="${date//-/}"
             echo "=== ingest date $date_arg ==="
             python -m boatrace_edge.ingest \
-              --date "$date_arg" \
+              --date-from "$date_arg" \
+              --date-to "$date_arg" \
               --venues 01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 \
               --race-start 1 \
               --race-end 12 \
