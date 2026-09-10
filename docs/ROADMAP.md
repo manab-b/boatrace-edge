@@ -22,8 +22,8 @@
 |---|---|---|
 | Foundation implementation | COMPLETE | Sufficient for the foundation gate |
 | Foundation verification | COMPLETE | GitHub Actions passed pytest and PostgreSQL migration validation |
-| Historical data engine | **COMPLETE** | Real official-source vertical slice passed end-to-end in CI |
-| Probability model | **IN PROGRESS** | PIT-safe deterministic lane baseline and calibration metrics implemented; historical training volume is still insufficient for a trustworthy model gate |
+| Historical data engine | COMPLETE | Real official-source vertical slice passed end-to-end in CI |
+| Probability model | **IN PROGRESS** | PIT-safe lane baseline, dataset assembly, temporal split, and calibration metrics implemented; historical training volume is still insufficient for a trustworthy model gate |
 | EV engine | BLOCKED | Must wait for valid probabilities + timestamped odds |
 | Walk-forward research | BLOCKED | Must wait for PIT dataset/model |
 | Signal selection | BLOCKED | Must wait for OOS evidence |
@@ -32,7 +32,7 @@
 
 ### Phase 0 Completion Evidence
 
-GitHub Actions run #19 completed successfully on commit `6bf099daf152bbaa4125af53e8794b3d1284d37`. The job completed with `success`; pytest and the PostgreSQL migration validation step both completed successfully.
+GitHub Actions run #19 completed successfully on commit `6bf099daf152b7baa4125af53e8794b3d1284d37`. The job completed with `success`; pytest and the PostgreSQL migration validation step both completed successfully.
 
 ### Loop / Duplication Audit
 
@@ -72,13 +72,16 @@ Phase 2 becomes COMPLETE only when all are true:
 
 - Transparent empirical lane-frequency baseline (`lane-frequency-v1`).
 - Explicit six-lane / one-winner training-row validation.
+- PIT-safe loader from normalized `race`, `entry`, and `race_result` tables using `scheduled_deadline_at` as the feature cutoff.
+- Deterministic chronological whole-race holdout split.
+- Reproducible baseline holdout evaluation with model version and train/holdout temporal provenance.
 - Deterministic binary log-loss and Brier-score evaluation.
 - Calibration-bin calculation.
-- Tests for model invariants, malformed rows, probability bounds, and calibration metrics.
+- Tests for model invariants, malformed rows, temporal separation, deterministic evaluation, probability bounds, and calibration metrics.
 
 ### Current blocker
 
-The repository currently proves only one real historical race end-to-end in CI. That is sufficient for the Historical Data Engine gate but not sufficient evidence for training/holdout model evaluation. No model is marked production-ready from that single race.
+The repository currently proves only one real historical race end-to-end in CI. The model code and evaluation pipeline are ready, but a trustworthy Phase 2 gate still requires a materially larger real historical dataset with multiple temporal periods. No synthetic rows are used in the production ingestion/evaluation path, and no model is marked production-ready from the single smoke-test race.
 
 ## Phase Progress
 
@@ -86,7 +89,7 @@ The repository currently proves only one real historical race end-to-end in CI. 
 |---|---|---|
 | Phase 0 — Foundation | **COMPLETE** | Tests + PostgreSQL migration passed in CI |
 | Phase 1 — Historical Data Engine | **COMPLETE** | Official-source vertical slice + raw immutability + explicit odds coverage + CI smoke test passed |
-| Phase 2 — Baseline Probability Model | **IN PROGRESS** | PIT-safe baseline + metrics implemented; needs sufficient historical training/holdout dataset |
+| Phase 2 — Baseline Probability Model | **IN PROGRESS** | PIT-safe dataset + baseline + metrics + temporal evaluation implemented; needs sufficient real historical dataset |
 | Phase 3 — Market / EV Engine | BLOCKED | Valid PIT odds + settlement model |
 | Phase 4 — Backtest / Walk-Forward | BLOCKED | Point-in-time + OOS integrity |
 | Phase 5 — Signal Selection | BLOCKED | Positive OOS evidence |
