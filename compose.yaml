@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: boatrace_edge
+      POSTGRES_USER: boatrace_edge
+      POSTGRES_PASSWORD: local-dev-only
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U boatrace_edge -d boatrace_edge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
