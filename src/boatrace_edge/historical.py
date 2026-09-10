@@ -104,6 +104,17 @@ def parse_racelist(
         JST,
     )
 
+    identity_matches = re.findall(
+        r"\b(\d{4})\s*/\s*[A-Z]\d\s+(.{1,20}?)\s+[^ /]+/[^ /]+\s+\d+歳/",
+        page_text,
+    )
+    if len(identity_matches) >= 6:
+        entries = tuple(
+            EntryRecord(lane, racer_id, _clean(name))
+            for lane, (racer_id, name) in enumerate(identity_matches[:6], start=1)
+        )
+        return deadline, entries
+
     target = next((t for t in soup.find_all("table") if "登録番号/級別" in t.get_text(" ")), None)
     if target is None:
         raise ValueError("official racelist entry table not found")
