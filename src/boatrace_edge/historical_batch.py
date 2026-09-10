@@ -3,14 +3,8 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
-from .historical import (
-    RaceSnapshot,
-    _fetch,
-    parse_racelist,
-    parse_resultlist,
-    racelist_url,
-    resultlist_url,
-)
+from .historical import RaceSnapshot, _fetch, parse_racelist, parse_resultlist, racelist_url, resultlist_url
+from .official_archive import archive_documents, fetch_program_archive, fetch_result_archive, parse_program_text, parse_result_text
 
 
 OFFICIAL_VENUE_CODES = tuple(f"{number:02d}" for number in range(1, 25))
@@ -51,12 +45,7 @@ def validate_batch_range(
 def collect_outcome_day(
     race_date: str, venue_code: str, *, race_start: int = 1, race_end: int = 12
 ) -> tuple[RaceSnapshot, ...]:
-    """Collect official entries/deadlines plus official results without odds.
-
-    The odds status remains UNKNOWN because this path deliberately does not
-    request an odds source. INCOMPLETE_SOURCE_RESPONSE is reserved for an
-    attempted odds fetch whose official response cannot be normalized safely.
-    """
+    """Collect official entries/deadlines plus official results without odds."""
     validate_batch_range(
         start=race_date,
         end=race_date,
@@ -82,6 +71,50 @@ def collect_outcome_day(
                 "UNKNOWN",
                 result,
                 (racelist, results),
+            )
+        )
+    return tuple(snapshots)
+
+
+def collect_outcome_archive_day(
+    race_date: str, venue_code: str, *, race_start: int = 1, race_end: int = 12
+) -> tuple[RaceSnapshot, ...]:
+    """Collect a venue/day from the official daily B/K LZH archives.
+
+    This path performs two official downloads per day, rather than one result
+    request plus one racelist request per race. Odds are deliberately excluded.
+    Races missing either a complete six-entry program or a result are rejected;
+    no inferred rows are created.
+    """
+    validate_batch_range(
+        start=race_date,
+        end=race_date,
+        venues=(venue_code,),
+        race_start=race_start,
+        race_end=race_end,
+    )
+    program = fetch_program_archive(race_date)
+    result = fetch_result_archive(race_date)
+    programs = parse_program_text(program.text, race_date, venue_code)
+    results = parse_result_text(result.text, venue_code)
+    documents = archive_documents(program, result)
+    snapshots: list[RaceSnapshot] = []
+    for race_number in range(race_start, race_end + 1):
+        if race_number not in programs or race_number not in results:
+            raise ValueError(f"official archive missing complete data for {race_date}-{venue_code}-{race_number:02d}")
+        deadline, entries = programs[race_number]
+        snapshots.append(
+            RaceSnapshot(
+                f"{race_date}-{venue_code}-{race_number:02d}",
+                race_date,
+                venue_code,
+                race_number,
+                deadline,
+                entries,
+                (),
+                "UNKNOWN",
+                results[race_number],
+                documents,
             )
         )
     return tuple(snapshots)
