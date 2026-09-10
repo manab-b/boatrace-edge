@@ -41,13 +41,20 @@ jobs:
       - name: Ingest real official historical training periods
         run: |
           set -euo pipefail
-          python -m boatrace_edge.ingest \
-            --date-from 20260101 \
-            --date-to 20260331 \
-            --venues 01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 \
-            --race-start 1 \
-            --race-end 12 \
-            --source archive
+          for date in $(seq -w 20260101 20260331); do
+            echo "=== ingest date $date ==="
+            python -m boatrace_edge.ingest \
+              --date "$date" \
+              --venues 01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 \
+              --race-start 1 \
+              --race-end 12 \
+              --source archive
+            race_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race')"
+            entry_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM entry')"
+            result_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race_result')"
+            date_count="$(psql "$DATABASE_URL" -tAc 'SELECT count(DISTINCT scheduled_deadline_at::date) FROM race')"
+            echo "progress: date=$date races=$race_count entries=$entry_count results=$result_count dates=$date_count"
+          done
       - name: Verify research-volume historical dataset
         run: |
           set -euo pipefail
