@@ -108,9 +108,6 @@ def _parse_race_header(line: str) -> int | None:
 
 
 def _entry_from_line(line: str) -> EntryRecord | None:
-    # Official B files are fixed-format and may place the racer number
-    # immediately after the lane number; whitespace is not semantically
-    # significant here.
     match = re.match(r"^\s*([1-6])\s*(\d{4})(.*)$", line)
     if not match:
         return None
@@ -148,6 +145,9 @@ def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, 
             current_race = race
             deadline = None
             entries = {}
+            deadline_match = re.search(r"締切予定\s*(\d{1,2}):(\d{2})", line)
+            if deadline_match:
+                deadline = time(int(deadline_match.group(1)), int(deadline_match.group(2)))
             continue
         if current_race is None:
             continue
@@ -155,9 +155,6 @@ def parse_program_text(text: str, race_date: str, venue_code: str) -> dict[int, 
         if deadline_match:
             deadline = time(int(deadline_match.group(1)), int(deadline_match.group(2)))
         if len(entries) >= 6:
-            # A B archive can contain additional non-entry sections after the
-            # six official starters. They must not be mistaken for duplicate
-            # lanes belonging to the same race.
             continue
         entry = _entry_from_line(line)
         if entry is not None:
@@ -184,7 +181,7 @@ def parse_result_text(text: str, venue_code: str) -> dict[int, ResultRecord]:
         pair_matches = list(re.finditer(r"([1-6])\s*-\s*([1-6])\s+([0-9,]+)", normalized))
         if triple_match is None or not pair_matches:
             continue
-        pair_match = pair_matches[-1]
+        pair_match = pair_matches[0]
         results[race_number] = ResultRecord(
             f"{triple_match.group(1)}-{triple_match.group(2)}-{triple_match.group(3)}",
             Decimal(triple_match.group(4).replace(",", "")),
