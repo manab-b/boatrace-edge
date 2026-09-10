@@ -43,7 +43,7 @@ jobs:
       - name: Verify historical records
         run: |
           test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM raw_document')" = "3"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM entry WHERE race_id = ''20260226-04-01''')" = "6"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT odds_status FROM race WHERE race_id = ''20260226-04-01''')" = "INCOMPLETE_SOURCE_RESPONSE"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM historical_odds WHERE race_id = ''20260226-04-01''')" = "0"
-          test "$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM race_result WHERE race_id = ''20260226-04-01''')" = "1"
+          test "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM entry WHERE race_id = '20260226-04-01'")" = "6"
+          test "$(psql "$DATABASE_URL" -tAc "SELECT odds_status FROM race WHERE race_id = '20260226-04-01'")" = "INCOMPLETE_SOURCE_RESPONSE"
+          test "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM historical_odds WHERE race_id = '20260226-04-01'")" = "0"
+          test "$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM race_result WHERE race_id = '20260226-04-01'")" = "1"
