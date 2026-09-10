@@ -61,5 +61,5 @@ The foundation is now large enough. **No additional infrastructure should be add
 | Phase 8 — Paper Trading | BLOCKED | Live pipeline ready |
 | Phase 9 — Production | BLOCKED | Paper trading evidence |
 
-**Current gate: Phase 0. Do not start Phase 1 until automated tests are verified green.**
+**Current gate: Phase 0. CI must execute successfully; do not start Phase 1 before the green result is confirmed.**
 
