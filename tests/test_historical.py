@@ -10,12 +10,12 @@ RACELIST_HTML = """
 <html><body>
 締切予定時刻 10:57 11:26 11:55 12:24 12:54 13:24 13:55 14:26 14:58 15:31 16:05 16:40
 <table><tr><th>登録番号/級別</th><th>氏名</th></tr>
-<tr><td>1</td><td>4200 / B1</td><td><a>早川 尚人</a></td></tr>
-<tr><td>2</td><td>4339 / B1</td><td><a>平瀬 城啓</a></td></tr>
-<tr><td>3</td><td>4197 / B1</td><td><a>渥美 卓郎</a></td></tr>
-<tr><td>4</td><td>4641 / B1</td><td><a>磯村 匠</a></td></tr>
-<tr><td>5</td><td>4060 / B1</td><td><a>島田 一生</a></td></tr>
-<tr><td>6</td><td>4298 / A1</td><td><a>宮下 元胤</a></td></tr>
+<tr><td>1</td><td>4200 / B1</td><td><a>早川 尚人</a></td><td>大阪/大阪 43歳/</td></tr>
+<tr><td>2</td><td>4339 / B1</td><td><a>平瀬 城啓</a></td><td>大阪/大阪 44歳/</td></tr>
+<tr><td>3</td><td>4197 / B1</td><td><a>渥美 卓郎</a></td><td>大阪/大阪 45歳/</td></tr>
+<tr><td>4</td><td>4641 / B1</td><td><a>磯村 匠</a></td><td>大阪/大阪 38歳/</td></tr>
+<tr><td>5</td><td>4060 / B1</td><td><a>島田 一生</a></td><td>大阪/大阪 42歳/</td></tr>
+<tr><td>6</td><td>4298 / A1</td><td><a>宮下 元胤</a></td><td>大阪/大阪 43歳/</td></tr>
 </table></body></html>
 """
 
