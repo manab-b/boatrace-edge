@@ -23,7 +23,7 @@
 | Foundation implementation | COMPLETE | Sufficient for the foundation gate |
 | Foundation verification | COMPLETE | GitHub Actions passed pytest and PostgreSQL migration validation |
 | Historical data engine | COMPLETE | Real official-source vertical slice passed end-to-end in CI |
-| Probability model | **IN PROGRESS** | PIT-safe lane baseline, dataset assembly, temporal split, and calibration metrics implemented; historical training volume is still insufficient for a trustworthy model gate |
+| Probability model | **IN PROGRESS** | PIT-safe lane baseline, dataset assembly, temporal split, calibration metrics, and official bulk outcome ingestion are implemented; historical training volume is still insufficient for the model gate |
 | EV engine | BLOCKED | Must wait for valid probabilities + timestamped odds |
 | Walk-forward research | BLOCKED | Must wait for PIT dataset/model |
 | Signal selection | BLOCKED | Must wait for OOS evidence |
@@ -66,7 +66,7 @@ Phase 2 becomes COMPLETE only when all are true:
 4. Probability quality is measured with at least log loss, Brier score, and calibration bins on a temporally held-out dataset.
 5. The holdout evaluation is separated from training data and its provenance is recorded.
 6. Tests cover dataset integrity, probability bounds/normalization, deterministic outputs, and rejection of malformed training rows.
-7. The historical dataset is large enough that the evaluation is not based on the single CI smoke-test race.
+7. The historical dataset is large enough that the evaluation is not based on the single CI smoke-test race. For this gate, the operational minimum is **10,000 complete races spanning at least 90 calendar days, with at least 1,000 races in both train and holdout periods**. This threshold is a research-quality floor, not a claim that the resulting baseline is production-ready.
 
 ### Current Phase 2 implementation
 
@@ -78,10 +78,12 @@ Phase 2 becomes COMPLETE only when all are true:
 - Deterministic binary log-loss and Brier-score evaluation.
 - Calibration-bin calculation.
 - Tests for model invariants, malformed rows, temporal separation, deterministic evaluation, probability bounds, and calibration metrics.
+- Official-source bulk outcome collector that fetches the official result list once per venue/day and official pre-race entry pages per selected race, deliberately excluding odds from the Phase 2 ingestion path.
+- Batch CLI support for inclusive date ranges, official venues 01–24, and race ranges 1–12.
 
 ### Current blocker
 
-The repository currently proves only one real historical race end-to-end in CI. The model code and evaluation pipeline are ready, but a trustworthy Phase 2 gate still requires a materially larger real historical dataset with multiple temporal periods. No synthetic rows are used in the production ingestion/evaluation path, and no model is marked production-ready from the single smoke-test race.
+The repository currently proves only one real historical race end-to-end in CI. The model code, PIT-safe evaluation pipeline, and bulk collector are ready, but the 10,000-race / 90-day real historical dataset has not yet been collected and evaluated. No synthetic rows are used in the production ingestion/evaluation path, and no model is marked production-ready from insufficient data.
 
 ## Phase Progress
 
@@ -89,7 +91,7 @@ The repository currently proves only one real historical race end-to-end in CI. 
 |---|---|---|
 | Phase 0 — Foundation | **COMPLETE** | Tests + PostgreSQL migration passed in CI |
 | Phase 1 — Historical Data Engine | **COMPLETE** | Official-source vertical slice + raw immutability + explicit odds coverage + CI smoke test passed |
-| Phase 2 — Baseline Probability Model | **IN PROGRESS** | PIT-safe dataset + baseline + metrics + temporal evaluation implemented; needs sufficient real historical dataset |
+| Phase 2 — Baseline Probability Model | **IN PROGRESS** | PIT-safe dataset + baseline + metrics + temporal evaluation + bulk collector implemented; needs 10,000 real races across 90+ days |
 | Phase 3 — Market / EV Engine | BLOCKED | Valid PIT odds + settlement model |
 | Phase 4 — Backtest / Walk-Forward | BLOCKED | Point-in-time + OOS integrity |
 | Phase 5 — Signal Selection | BLOCKED | Positive OOS evidence |
