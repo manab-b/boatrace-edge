@@ -109,16 +109,14 @@ def parse_racelist(
         page_text,
     )
     if len(identity_matches) >= 6:
-        entries = tuple(
+        return deadline, tuple(
             EntryRecord(lane, racer_id, _clean(name))
             for lane, (racer_id, name) in enumerate(identity_matches[:6], start=1)
         )
-        return deadline, entries
 
     target = next((t for t in soup.find_all("table") if "登録番号/級別" in t.get_text(" ")), None)
     if target is None:
         raise ValueError("official racelist entry table not found")
-
     entries: list[EntryRecord] = []
     for row in target.find_all("tr"):
         cells = [_clean(c.get_text(" ")) for c in row.find_all(["th", "td"])]
@@ -128,15 +126,10 @@ def parse_racelist(
         racer_match = re.search(r"\b(\d{4})\b", " ".join(cells))
         if not racer_match:
             raise ValueError(f"racer registration number missing for lane {lane}")
-        names = [
-            _clean(a.get_text(" "))
-            for a in row.find_all("a")
-            if _clean(a.get_text(" ")) and not re.fullmatch(r"\d+R?", _clean(a.get_text(" ")))
-        ]
+        names = [_clean(a.get_text(" ")) for a in row.find_all("a") if _clean(a.get_text(" "))]
         if not names:
             raise ValueError(f"racer name missing for lane {lane}")
         entries.append(EntryRecord(lane, racer_match.group(1), names[0]))
-
     if len(entries) != 6:
         raise ValueError(f"expected 6 entries, got {len(entries)}")
     return deadline, tuple(entries)
@@ -144,27 +137,25 @@ def parse_racelist(
 
 def parse_odds3t(payload: str) -> tuple[OddsRecord, ...]:
     soup = BeautifulSoup(payload, "html.parser")
-    records: list[OddsRecord] = []
-    for table in soup.find_all("table"):
-        for row in table.find_all("tr"):
-            tokens = [_clean(x) for x in row.stripped_strings]
-            if len(tokens) < 18:
-                continue
-            groups = tokens[:18]
-            if not all(re.fullmatch(r"\d+(?:\.\d+)?", x) for x in groups):
-                continue
-            for first in range(1, 7):
-                second = int(groups[(first - 1) * 3])
-                third = int(groups[(first - 1) * 3 + 1])
-                odds = Decimal(groups[(first - 1) * 3 + 2])
-                if len({first, second, third}) != 3:
-                    raise ValueError("invalid 3T combination in official odds")
-                records.append(OddsRecord(f"{first}-{second}-{third}", odds))
-        if len(records) == 120:
-            break
+    page_text = _clean(soup.get_text(" "))
+    if "3連単オッズ" not in page_text:
+        raise ValueError("official 3T odds section not found")
+    section = page_text.split("3連単オッズ", 1)[1]
+    section = section.split("締切時オッズは", 1)[0]
+    tokens = re.findall(r"\d+(?:\.\d+)?", section)
+    if len(tokens) != 360:
+        raise ValueError(f"expected 360 numeric 3T odds tokens, got {len(tokens)}")
 
-    if len(records) != 120:
-        raise ValueError(f"expected 120 3T odds, got {len(records)}")
+    records: list[OddsRecord] = []
+    for row_index in range(20):
+        row = tokens[row_index * 18 : (row_index + 1) * 18]
+        for first in range(1, 7):
+            second = int(row[(first - 1) * 3])
+            third = int(row[(first - 1) * 3 + 1])
+            odds = Decimal(row[(first - 1) * 3 + 2])
+            if len({first, second, third}) != 3:
+                raise ValueError("invalid 3T combination in official odds")
+            records.append(OddsRecord(f"{first}-{second}-{third}", odds))
     return tuple(records)
 
 
