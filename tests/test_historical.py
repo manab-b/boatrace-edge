@@ -1,4 +1,5 @@
 from decimal import Decimal
+from itertools import permutations
 
 import pytest
 
@@ -19,25 +20,23 @@ RACELIST_HTML = """
 """
 
 
-ODDS_HTML = """
-<html><body><table>
-<tr>""" + "".join(f"<th>{i}</th>" for i in range(18)) + """</tr>
-<tr>""" + "".join(f"<td>{x}</td>" for x in (
-    2,3,"19.7", 1,3,"56.6", 1,2,"76.6", 1,2,"137.5", 1,2,"112.6", 1,2,"60.0"
-)) + """</tr>
-""" + "".join(
-    "<tr>" + "".join(f"<td>{x}</td>" for x in values) + "</tr>"
-    for values in [
-        (4,"40.6",4,"69.8",4,"104.4",3,"167.4",3,"121.7",3,"126.1", 0,0,0,0,0,0),
-    ]
-) + "</table></body></html>"
-
-
 RESULT_HTML = """
 <html><body><table>
 <tr><td>1R</td><td>1 -3 -6</td><td>¥2,880</td><td>1 -3</td><td>¥1,230</td><td>一般</td><td>逃げ</td><td></td></tr>
 </table></body></html>
 """
+
+
+def _valid_odds_html() -> str:
+    rows = []
+    by_first = {first: list(permutations([lane for lane in range(1, 7) if lane != first], 2)) for first in range(1, 7)}
+    for row_index in range(20):
+        cells = []
+        for first in range(1, 7):
+            second, third = by_first[first][row_index]
+            cells.extend((str(second), str(third), "10.0"))
+        rows.append("<tr>" + "".join(f"<td>{x}</td>" for x in cells) + "</tr>")
+    return "<html><body><table>" + "".join(rows) + "</table></body></html>"
 
 
 def test_racelist_parses_six_entries_and_jst_deadline() -> None:
@@ -56,6 +55,13 @@ def test_resultlist_never_infers_profit_from_result_only() -> None:
     assert result.payout_2t == Decimal("1230")
 
 
-def test_odds_parser_rejects_incomplete_real_shape() -> None:
+def test_odds_parser_accepts_complete_120_combination_matrix() -> None:
+    records = parse_odds3t(_valid_odds_html())
+    assert len(records) == 120
+    assert len({record.combination for record in records}) == 120
+    assert records[0].odds == Decimal("10.0")
+
+
+def test_odds_parser_rejects_incomplete_matrix() -> None:
     with pytest.raises(ValueError, match="expected 120"):
-        parse_odds3t(ODDS_HTML)
+        parse_odds3t("<html><body><table><tr><td>1</td></tr></table></body></html>")
