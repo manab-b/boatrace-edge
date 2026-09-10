@@ -22,8 +22,8 @@
 |---|---|---|
 | Foundation implementation | COMPLETE | Sufficient for the foundation gate |
 | Foundation verification | COMPLETE | GitHub Actions passed pytest and PostgreSQL migration validation |
-| Historical data engine | **IN PROGRESS** | Real official-source vertical slice implemented; current gate is live ingestion verification |
-| Probability model | BLOCKED | Must wait for historical PIT dataset |
+| Historical data engine | **COMPLETE** | Real official-source vertical slice passed end-to-end in CI |
+| Probability model | **CURRENT / NOT STARTED** | Historical data is now available; no model code exists yet |
 | EV engine | BLOCKED | Must wait for valid probabilities + timestamped odds |
 | Walk-forward research | BLOCKED | Must wait for PIT dataset/model |
 | Signal selection | BLOCKED | Must wait for OOS evidence |
@@ -38,48 +38,25 @@ GitHub Actions run #19 completed successfully on commit `6bf099daf152b7baa4125af
 
 The latest 20 commits were overwhelmingly Phase 0 work. That process churn has now stopped. The foundation is frozen. **Do not add infrastructure unless it directly unblocks a failing gate or the active phase.**
 
-## Phase 1 — Historical Data Engine
+## Phase 1 — Historical Data Engine — COMPLETE
 
-### Scope
+### Completion evidence
 
-Only real historical acquisition, immutable raw storage, normalization, timestamp/PIT integrity, and tests. No prediction, EV, signal selection, live trading, or unrelated infrastructure.
+GitHub Actions run #46 completed successfully on commit `926c6001d6719fcf6eac931d2421382bf9d8dd30`. The run passed 14 tests, all three PostgreSQL migrations, a real official-source ingestion of `20260226 / venue 04 / race 1`, and database verification.
 
-### Completion gate
-
-Phase 1 becomes COMPLETE only when all are true:
-
-1. An authoritative BOAT RACE official source is fetched over the network.
-2. A fixed historical race is ingested end-to-end without synthetic production data.
-3. Three raw official documents are stored immutably: race list, 3T odds, and race result.
-4. Six race entries are normalized with official racer registration IDs.
-5. The 3T odds response is captured and its coverage is explicitly classified. **Only a complete 120-combination response may be normalized into `historical_odds`; an incomplete response must produce zero normalized odds rather than invented or partial values.**
-6. The official 3T/2T result and payouts are normalized.
-7. Source fetch time and content SHA-256 are retained.
-8. Closing odds are explicitly marked as having **no source observation timestamp** rather than inventing one. They are therefore not eligible for point-in-time model training as timestamped odds observations.
-9. PostgreSQL migrations 001–003 and the end-to-end ingestion smoke test pass in CI.
-10. Parser and integrity tests pass.
-
-### Current Phase 1 implementation
-
-- Official source URL builders for racelist, 3T odds, and race result.
-- Immutable raw document table with mutation-blocking trigger.
-- Normalized race, entries, 3T closing odds when complete, and race result storage.
-- Explicit `odds_status` to distinguish complete source responses from incomplete source responses.
-- Idempotent historical snapshot persistence.
-- Parser validation for six entries, 120 unique 3T combinations on complete fixtures, and result/payout fields.
-- CI smoke test against fixed official historical race `20260226 / venue 04 / race 1`.
+The smoke test fetched and stored three official documents, normalized six entries and one official result, and explicitly classified the official 3T odds response as `INCOMPLETE_SOURCE_RESPONSE`; zero partial odds rows were promoted. This is intentional data-integrity behavior, not a missing-value imputation.
 
 ### Important data-integrity decisions
 
-The official 3T page labels the displayed values as **締切時オッズ** and states that they represent odds after sales-ticket aggregation. The page does not expose a source observation timestamp. The ingestion layer therefore never fabricates an observation timestamp. If the network response is incomplete, the raw document is retained, `odds_status` becomes `INCOMPLETE_SOURCE_RESPONSE`, and no partial odds are promoted into the normalized odds table. This prevents a silently truncated market from contaminating later research.
+The official 3T page labels the displayed values as **締切時オッズ** and the fetched HTTP response did not expose a complete 120-combination matrix in CI. The ingestion layer therefore retains the raw odds document, marks coverage as incomplete, and refuses to normalize partial odds. It also does not fabricate an observation timestamp. This prevents a truncated or non-point-in-time market snapshot from contaminating model research.
 
 ## Phase Progress
 
 | Phase | Status | Gate |
 |---|---|---|
 | Phase 0 — Foundation | **COMPLETE** | Tests + PostgreSQL migration passed in CI |
-| Phase 1 — Historical Data Engine | **IN PROGRESS** | Official-source vertical slice + raw immutability + explicit odds coverage + CI smoke test |
-| Phase 2 — Baseline Probability Model | BLOCKED | Phase 1 pass |
+| Phase 1 — Historical Data Engine | **COMPLETE** | Official-source vertical slice + raw immutability + explicit odds coverage + CI smoke test passed |
+| Phase 2 — Baseline Probability Model | **CURRENT / NOT STARTED** | Use only data that is valid before the prediction cutoff |
 | Phase 3 — Market / EV Engine | BLOCKED | Valid PIT odds + settlement model |
 | Phase 4 — Backtest / Walk-Forward | BLOCKED | Point-in-time + OOS integrity |
 | Phase 5 — Signal Selection | BLOCKED | Positive OOS evidence |
@@ -88,4 +65,4 @@ The official 3T page labels the displayed values as **締切時オッズ** and s
 | Phase 8 — Paper Trading | BLOCKED | Live pipeline ready |
 | Phase 9 — Production | BLOCKED | Paper trading evidence |
 
-**Current phase: Phase 1 — Historical Data Engine.**
+**Current phase: Phase 2 — Baseline Probability Model.**
