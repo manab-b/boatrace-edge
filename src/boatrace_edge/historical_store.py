@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import date, timedelta
 
 import psycopg
 
 from .historical import RaceSnapshot
+
+
+CHECKPOINT_NAME = "official_outcome_archive"
 
 
 def _store_snapshot(cur: psycopg.Cursor, snapshot: RaceSnapshot) -> None:
@@ -96,3 +100,41 @@ def store_snapshots(database_url: str, snapshots: Iterable[RaceSnapshot]) -> int
 
 def store_snapshot(database_url: str, snapshot: RaceSnapshot) -> None:
     store_snapshots(database_url, (snapshot,))
+
+
+def get_checkpoint(database_url: str) -> date | None:
+    """Return the last date whose complete batch was committed."""
+    with psycopg.connect(database_url) as conn:
+        row = conn.execute(
+            "SELECT last_completed_date FROM ingestion_checkpoint WHERE pipeline_name = %s",
+            (CHECKPOINT_NAME,),
+        ).fetchone()
+    return row[0] if row else None
+
+
+def mark_date_completed(database_url: str, race_date: str) -> None:
+    """Advance the checkpoint only after a whole calendar-day batch commits."""
+    completed = date.fromisoformat(race_date)
+    with psycopg.connect(database_url) as conn:
+        conn.execute(
+            """
+            INSERT INTO ingestion_checkpoint (pipeline_name, last_completed_date, updated_at)
+            VALUES (%s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (pipeline_name) DO UPDATE SET
+                last_completed_date = EXCLUDED.last_completed_date,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE ingestion_checkpoint.last_completed_date IS NULL
+               OR EXCLUDED.last_completed_date > ingestion_checkpoint.last_completed_date
+            """,
+            (CHECKPOINT_NAME, completed),
+        )
+        conn.commit()
+
+
+def next_checkpoint_date(database_url: str, start: str) -> str:
+    """Return the first date that still needs ingestion at or after start."""
+    checkpoint = get_checkpoint(database_url)
+    start_date = date.fromisoformat(start)
+    if checkpoint is None:
+        return start
+    return max(start_date, checkpoint + timedelta(days=1)).isoformat()
