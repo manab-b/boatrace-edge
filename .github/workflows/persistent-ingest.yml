@@ -1,0 +1,72 @@
+name: Persistent historical ingest
+
+on:
+  workflow_dispatch:
+    inputs:
+      date_from:
+        description: "Inclusive start date (YYYYMMDD)"
+        required: true
+        default: "20260101"
+      date_to:
+        description: "Inclusive end date (YYYYMMDD)"
+        required: true
+        default: "20260401"
+      timeout_minutes:
+        description: "Maximum runtime per attempt"
+        required: true
+        default: "3"
+
+concurrency:
+  group: boatrace-edge-historical-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.BOATRACE_EDGE_DATABASE_URL }}
+      DATE_FROM: ${{ inputs.date_from }}
+      DATE_TO: ${{ inputs.date_to }}
+      ATTEMPT_TIMEOUT: ${{ inputs.timeout_minutes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate database secret
+        run: test -n "$DATABASE_URL"
+      - name: Install dependencies
+        run: python -m pip install -e "."
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Initialize persistent database schema
+        run: |
+          set -euo pipefail
+          has_race="$(psql "$DATABASE_URL" -tAc "SELECT to_regclass('public.race') IS NOT NULL")"
+          if [ "$has_race" != "t" ]; then
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/001_foundation.sql
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/002_historical_data.sql
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/003_odds_coverage.sql
+          fi
+          has_checkpoint="$(psql "$DATABASE_URL" -tAc "SELECT to_regclass('public.ingestion_checkpoint') IS NOT NULL")"
+          if [ "$has_checkpoint" != "t" ]; then
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/004_ingestion_checkpoint.sql
+          fi
+      - name: Ingest until attempt timeout
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM "${ATTEMPT_TIMEOUT}m" \
+            python -m boatrace_edge.ingest \
+              --date-from "$DATE_FROM" \
+              --date-to "$DATE_TO" \
+              --venues 01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 \
+              --race-start 1 \
+              --race-end 12 \
+              --source archive \
+              --resume
+      - name: Report checkpoint
+        if: always()
+        run: |
+          psql "$DATABASE_URL" -c "SELECT pipeline_name, last_completed_date, updated_at FROM ingestion_checkpoint;"
+          psql "$DATABASE_URL" -c "SELECT count(*) AS races, count(*) * 6 AS expected_entries, (SELECT count(*) FROM entry) AS entries, (SELECT count(*) FROM race_result) AS results, count(DISTINCT race_date) AS dates FROM race;"
