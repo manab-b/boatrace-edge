@@ -5,7 +5,7 @@ import os
 
 from .historical import collect_race
 from .historical_batch import collect_outcome_archive_day, collect_outcome_day, validate_batch_range
-from .historical_store import store_snapshot, store_snapshots
+from .historical_store import mark_date_completed, next_checkpoint_date, store_snapshot, store_snapshots
 
 
 def main() -> None:
@@ -19,6 +19,7 @@ def main() -> None:
     parser.add_argument("--race-start", type=int, default=1, choices=range(1, 13))
     parser.add_argument("--race-end", type=int, default=12, choices=range(1, 13))
     parser.add_argument("--source", choices=("archive", "html"), default="archive")
+    parser.add_argument("--resume", action="store_true", help="resume after the last successfully committed calendar day")
     parser.add_argument("--database-url", default=os.environ.get("DATABASE_URL"))
     args = parser.parse_args()
     if not args.database_url:
@@ -31,8 +32,9 @@ def main() -> None:
         if not args.date_from or not args.date_to or not args.venues:
             raise SystemExit("batch mode requires --date-from, --date-to, and --venues")
         venues = tuple(value.strip() for value in args.venues.split(",") if value.strip())
+        start_date = next_checkpoint_date(args.database_url, args.date_from) if args.resume else args.date_from
         dates = validate_batch_range(
-            start=args.date_from,
+            start=start_date,
             end=args.date_to,
             venues=venues,
             race_start=args.race_start,
@@ -58,10 +60,15 @@ def main() -> None:
                         race_end=args.race_end,
                     )
                 )
-            count += store_snapshots(args.database_url, snapshots)
+            day_count = store_snapshots(args.database_url, snapshots)
+            mark_date_completed(args.database_url, race_date)
+            count += day_count
+            print(f"committed date={race_date} races={day_count}")
         print(f"ingested official outcome races={count} dates={len(dates)} venues={len(venues)} source={args.source}")
         return
 
+    if args.resume:
+        raise SystemExit("--resume is only valid in batch mode")
     if not args.date or not args.venue or args.race is None:
         raise SystemExit("single-race mode requires --date, --venue, and --race")
     snapshot = collect_race(args.date, args.venue, args.race)
