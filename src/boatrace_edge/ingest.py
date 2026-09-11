@@ -5,7 +5,7 @@ import os
 
 from .historical import collect_race
 from .historical_batch import collect_outcome_archive_day, collect_outcome_day, validate_batch_range
-from .historical_store import mark_date_completed, next_checkpoint_date, store_snapshot, store_snapshots
+from .historical_store import next_checkpoint_date, store_snapshot, store_snapshots
 
 
 def main() -> None:
@@ -60,8 +60,7 @@ def main() -> None:
                         race_end=args.race_end,
                     )
                 )
-            day_count = store_snapshots(args.database_url, snapshots)
-            mark_date_completed(args.database_url, race_date)
+            day_count = store_snapshots(args.database_url, snapshots, completed_date=race_date)
             count += day_count
             print(f"committed date={race_date} races={day_count}")
         print(f"ingested official outcome races={count} dates={len(dates)} venues={len(venues)} source={args.source}")
