@@ -86,14 +86,30 @@ def _store_snapshot(cur: psycopg.Cursor, snapshot: RaceSnapshot) -> None:
     )
 
 
-def store_snapshots(database_url: str, snapshots: Iterable[RaceSnapshot]) -> int:
-    """Persist a batch in one PostgreSQL transaction."""
+def store_snapshots(
+    database_url: str, snapshots: Iterable[RaceSnapshot], *, completed_date: str | None = None
+) -> int:
+    """Persist a batch and optional checkpoint in one PostgreSQL transaction."""
     count = 0
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cur:
             for snapshot in snapshots:
                 _store_snapshot(cur, snapshot)
                 count += 1
+            if completed_date is not None:
+                completed = date.fromisoformat(completed_date)
+                cur.execute(
+                    """
+                    INSERT INTO ingestion_checkpoint (pipeline_name, last_completed_date, updated_at)
+                    VALUES (%s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (pipeline_name) DO UPDATE SET
+                        last_completed_date = EXCLUDED.last_completed_date,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE ingestion_checkpoint.last_completed_date IS NULL
+                       OR EXCLUDED.last_completed_date > ingestion_checkpoint.last_completed_date
+                    """,
+                    (CHECKPOINT_NAME, completed),
+                )
         conn.commit()
     return count
 
