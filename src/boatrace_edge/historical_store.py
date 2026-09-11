@@ -152,5 +152,5 @@ def next_checkpoint_date(database_url: str, start: str) -> str:
     checkpoint = get_checkpoint(database_url)
     start_date = date.fromisoformat(start)
     if checkpoint is None:
-        return start
+        return start_date.strftime("%Y%m%d")
     return max(start_date, checkpoint + timedelta(days=1)).strftime("%Y%m%d")
